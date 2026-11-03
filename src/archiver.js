@@ -107,8 +107,9 @@ async function archive(files, archiveRoot, options) {
 async function removeDuplicates(files, options) {
   const opts = options || {};
   const toTrash = opts.toTrash !== false;
-  const result = { ok: 0, failed: [], skipped: [] };
+  const result = { ok: 0, failed: [], skipped: [], done: [] };
 
+  const picked = [];
   for (const file of files) {
     if (!file.duplicate || !file.duplicate.isDuplicate) {
       result.skipped.push({ path: file.path, reason: '不是重复文件' });
@@ -118,18 +119,26 @@ async function removeDuplicates(files, options) {
       result.skipped.push({ path: file.path, reason: '是保留版本' });
       continue;
     }
+    picked.push(file);
+  }
+  if (!picked.length) return result;
+
+  // 默认一律走回收站（带 manifest，可恢复）
+  if (toTrash && opts.trashDir) {
+    const r = await moveToTrash(picked, opts.trashDir);
+    return {
+      ok: r.ok,
+      failed: r.failed,
+      skipped: [...result.skipped, ...r.skipped],
+      done: r.done
+    };
+  }
+
+  for (const file of picked) {
     try {
-      if (toTrash && opts.trashDir) {
-        await fsp.mkdir(opts.trashDir, { recursive: true });
-        const target = await uniqueTarget(opts.trashDir, file.name);
-        await fsp.rename(file.path, target).catch(async () => {
-          await fsp.copyFile(file.path, target);
-          await fsp.unlink(file.path);
-        });
-      } else {
-        await fsp.unlink(file.path);
-      }
+      await fsp.unlink(file.path);
       result.ok += 1;
+      result.done.push({ path: file.path, target: null });
     } catch (err) {
       result.failed.push({ path: file.path, error: err.code || err.message });
     }
@@ -139,15 +148,17 @@ async function removeDuplicates(files, options) {
 }
 
 /**
- * 把任意文件移到软件回收站（用于「一键整理」清理冗余，不限于重复文件）。
+ * 把任意文件移到软件回收站，并写 manifest 记录原路径（支持一键恢复）。
  */
 async function moveToTrash(files, trashDir) {
   const result = { ok: 0, failed: [], skipped: [], done: [] };
   if (!trashDir) throw new Error('回收站目录不能为空');
 
+  await fsp.mkdir(trashDir, { recursive: true });
+  const manifest = { createdAt: Date.now(), files: [] };
+
   for (const file of files) {
     try {
-      await fsp.mkdir(trashDir, { recursive: true });
       const target = await uniqueTarget(trashDir, file.name);
       try {
         await fsp.rename(file.path, target);
@@ -159,6 +170,12 @@ async function moveToTrash(files, trashDir) {
           throw err;
         }
       }
+      manifest.files.push({
+        name: path.basename(target),
+        originalPath: file.path,
+        trashedPath: target,
+        size: file.size || 0
+      });
       result.ok += 1;
       result.done.push({ path: file.path, target });
     } catch (err) {
@@ -166,7 +183,56 @@ async function moveToTrash(files, trashDir) {
     }
   }
 
+  if (manifest.files.length) {
+    try {
+      await fsp.writeFile(path.join(trashDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+    } catch {
+      /* 记录失败不影响文件已经在回收站里 */
+    }
+  }
+
   return result;
 }
 
-module.exports = { archive, removeDuplicates, moveToTrash, dirForCategory, GROUP_DIRS };
+/**
+ * 从回收站恢复一个文件到原位置。原位置已有同名文件时自动加 (1)，不覆盖。
+ */
+async function restoreFromTrash(batchDir, trashedPath) {
+  const manifestPath = path.join(batchDir, 'manifest.json');
+  const m = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  const item = (m.files || []).find((f) => path.resolve(f.trashedPath) === path.resolve(trashedPath));
+  if (!item) throw new Error('回收站里找不到这个文件');
+
+  try {
+    await fsp.access(item.trashedPath);
+  } catch {
+    throw new Error('文件已经不在回收站里了');
+  }
+
+  const targetDir = path.dirname(item.originalPath);
+  await fsp.mkdir(targetDir, { recursive: true });
+
+  let target = item.originalPath;
+  const ext = path.extname(target);
+  const base = path.basename(target, ext);
+  let i = 1;
+  for (;;) {
+    try {
+      await fsp.access(target);
+      target = path.join(targetDir, `${base} (${i})${ext}`);
+      i += 1;
+      if (i > 999) throw new Error('同名文件过多');
+    } catch (err) {
+      if (err.code === 'ENOENT') break;
+      throw err;
+    }
+  }
+
+  await fsp.rename(item.trashedPath, target);
+  item.restoredAt = Date.now();
+  item.restoredTo = target;
+  await fsp.writeFile(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+  return { ok: true, path: target };
+}
+
+module.exports = { archive, removeDuplicates, moveToTrash, restoreFromTrash, dirForCategory, GROUP_DIRS };
