@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   scan: (payload) => ipcRenderer.invoke('scan:start', payload),
   cancelScan: () => ipcRenderer.invoke('scan:cancel'),
   lastScan: () => ipcRenderer.invoke('scan:last'),
+  searchContent: (payload) => ipcRenderer.invoke('search:content', payload),
 
   preview: (filePath) => ipcRenderer.invoke('file:preview', filePath),
   openFile: (filePath) => ipcRenderer.invoke('file:open', filePath),
