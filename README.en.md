@@ -31,15 +31,15 @@ Settings and data live in an `AI产出管家数据` folder next to the exe; move
 
 **File list** — click any row, the right panel shows the content. No need to open another app.
 
-![Main window](docs/screenshots/main.png)
+![Main window](docs/screenshots/en/main.png)
 
 **Search inside files** — can't remember the filename? Search what you wrote. The matching line is highlighted right in the list.
 
-![Full-text search](docs/screenshots/search.png)
+![Full-text search](docs/screenshots/en/search.png)
 
 **Stats** — see which AI produced what, and how much space you could reclaim.
 
-![Stats](docs/screenshots/stats.png)
+![Stats](docs/screenshots/en/stats.png)
 
 > Screenshots use demo documents, not real user data.
 
