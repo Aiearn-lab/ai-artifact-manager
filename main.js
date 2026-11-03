@@ -2,7 +2,8 @@
 
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, safeStorage } = require('electron');
 const path = require('path');
-const fsp = require('fs').promises;
+const fsSync = require('fs');
+const fsp = fsSync.promises;
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 
@@ -132,6 +133,56 @@ function pickFiles(paths) {
   if (!Array.isArray(paths) || !paths.length) return [];
   const set = new Set(paths.map((p) => path.resolve(p)));
   return (lastScan ? lastScan.files : []).filter((f) => set.has(path.resolve(f.path)));
+}
+
+/** 回收站按「源文件所在盘」存放：删 E 盘大文件不会先复制到 C 盘塞满系统盘 */
+function trashDirForFile(filePath) {
+  const drive = path.parse(path.resolve(filePath)).root || 'C:\\';
+  return path.join(drive, '.AI产出管家回收站');
+}
+
+/** 所有可能存在的回收站根目录（含旧版 userData/trash，兼容历史记录） */
+function trashRoots() {
+  const roots = [path.join(app.getPath('userData'), 'trash')];
+  for (let c = 67; c <= 90; c += 1) {
+    const drive = `${String.fromCharCode(c)}:\\`;
+    const p = path.join(drive, '.AI产出管家回收站');
+    try {
+      if (fsSync.existsSync(p)) roots.push(p);
+    } catch {
+      /* 盘不存在 */
+    }
+  }
+  return roots;
+}
+
+/** 把一批文件按盘分组移入回收站，返回合并结果 */
+async function trashFiles(files) {
+  const merged = { ok: 0, failed: [], skipped: [], done: [] };
+  const groups = new Map();
+  for (const f of files) {
+    const base = trashDirForFile(f.path);
+    if (!groups.has(base)) groups.set(base, []);
+    groups.get(base).push(f);
+  }
+
+  for (const [base, list] of groups) {
+    const stamp = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    let dir = path.join(base, stamp);
+    try {
+      await fsp.mkdir(dir, { recursive: true });
+    } catch {
+      // 盘根不可写时退回 userData
+      dir = path.join(app.getPath('userData'), 'trash', stamp);
+    }
+    const r = await archiver.moveToTrash(list, dir);
+    merged.ok += r.ok;
+    merged.failed.push(...r.failed);
+    merged.skipped.push(...r.skipped);
+    merged.done.push(...r.done);
+  }
+
+  return merged;
 }
 
 /** 预览/打开/定位只允许操作本次扫描结果里的文件，防止渲染进程传任意路径 */
@@ -530,43 +581,42 @@ function registerIpc() {
   });
 
   ipcMain.handle('trash:list', async () => {
-    const root = path.join(app.getPath('userData'), 'trash');
-    let dirs = [];
-    try {
-      dirs = await fsp.readdir(root, { withFileTypes: true });
-    } catch {
-      return [];
-    }
     const batches = [];
-    for (const d of dirs) {
-      if (!d.isDirectory()) continue;
-      const dir = path.join(root, d.name);
+    for (const root of trashRoots()) {
+      let dirs = [];
       try {
-        const m = JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'));
-        batches.push({
-          id: d.name,
-          createdAt: m.createdAt || Number(d.name) || 0,
-          files: (m.files || []).filter((f) => !f.restoredAt)
-        });
+        dirs = await fsp.readdir(root, { withFileTypes: true });
       } catch {
-        /* 没有 manifest 的旧批次跳过，文件仍在文件夹里可取回 */
+        continue;
+      }
+      for (const d of dirs) {
+        if (!d.isDirectory()) continue;
+        const dir = path.join(root, d.name);
+        try {
+          const m = JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'));
+          batches.push({
+            dir,
+            createdAt: m.createdAt || Number(String(d.name).split('-')[0]) || 0,
+            files: (m.files || []).filter((f) => !f.restoredAt)
+          });
+        } catch {
+          /* 没有 manifest 的旧批次跳过，文件仍在文件夹里可取回 */
+        }
       }
     }
     return batches.filter((b) => b.files.length).sort((a, b) => b.createdAt - a.createdAt);
   });
 
   ipcMain.handle('trash:restore', async (e, payload) => {
-    const p = payload || {};
-    const batchId = String(p.batch || '');
-    const trashedPath = String(p.trashedPath || '');
-    if (!batchId || !trashedPath) throw new Error('参数不完整');
+    const dir = String((payload && payload.dir) || '');
+    const trashedPath = String((payload && payload.trashedPath) || '');
+    if (!dir || !trashedPath) throw new Error('参数不完整');
 
-    const root = path.resolve(path.join(app.getPath('userData'), 'trash'));
-    const dir = path.resolve(path.join(root, batchId));
-    // 防目录穿越：批次目录必须在回收站根目录下
-    if (!dir.startsWith(root + path.sep)) throw new Error('非法批次');
+    const resolved = path.resolve(dir);
+    const allowed = trashRoots().map((r) => path.resolve(r));
+    if (!allowed.some((r) => resolved.startsWith(r + path.sep))) throw new Error('非法批次');
 
-    return archiver.restoreFromTrash(dir, trashedPath);
+    return archiver.restoreFromTrash(resolved, trashedPath);
   });
 
   ipcMain.handle('archive:run', async (e, payload) => {
@@ -580,18 +630,21 @@ function registerIpc() {
 
   ipcMain.handle('duplicate:remove', async (e, payload) => {
     const p = payload || {};
-    const files = pickFiles(p.paths).filter((f) => f.duplicate && f.duplicate.isDuplicate);
-    if (!files.length) return { ok: 0, failed: [], skipped: [{ reason: '没有可删除的重复文件' }] };
-    const trashDir = path.join(app.getPath('userData'), 'trash', String(Date.now()));
-    return archiver.removeDuplicates(files, { toTrash: p.toTrash !== false, trashDir });
+    const files = pickFiles(p.paths).filter(
+      (f) =>
+        f.duplicate &&
+        f.duplicate.isDuplicate &&
+        !(f.duplicate.withPath && path.resolve(f.path) === path.resolve(f.duplicate.withPath))
+    );
+    if (!files.length) return { ok: 0, failed: [], skipped: [{ reason: '没有可删除的重复文件' }], done: [] };
+    return trashFiles(files);
   });
 
   ipcMain.handle('cleanup:trash', async (e, payload) => {
     const p = payload || {};
     const files = pickFiles(p.paths);
     if (!files.length) return { ok: 0, failed: [], skipped: [], done: [] };
-    const trashDir = path.join(app.getPath('userData'), 'trash', String(Date.now()));
-    return archiver.moveToTrash(files, trashDir);
+    return trashFiles(files);
   });
 
   ipcMain.handle('export:run', async (e, payload) => {
