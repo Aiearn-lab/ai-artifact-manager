@@ -150,7 +150,7 @@ function setBusy(v) {
   });
   const scope = $('#btnScanScope');
   if (scope) {
-    scope.textContent = v ? '停止扫描' : '扫描整个电脑';
+    scope.textContent = v ? t('nav.stopScan') : t('nav.scanAll');
     scope.classList.toggle('btn-primary', !v);
     scope.classList.toggle('btn-danger-ghost', v);
   }
@@ -209,16 +209,16 @@ async function init() {
     const ratio = p.total ? Math.min(1, p.done / p.total) : 0.15;
     fill.style.width = `${Math.max(8, ratio * 100)}%`;
     const label = {
-      scanning: '正在看文件…',
-      classifying: '正在分类…',
-      deduping: '正在找重复内容…'
-    }[p.phase] || '处理中…';
-    $('#statusText').textContent = p.phase === 'scanning' && p.done ? `已扫描 ${p.done} 个文件…` : label;
+      scanning: t('prog.scanning'),
+      classifying: t('prog.classifying'),
+      deduping: t('prog.deduping')
+    }[p.phase] || t('prog.working');
+    $('#statusText').textContent = p.phase === 'scanning' && p.done ? t('prog.scanned', { n: p.done }) : label;
   });
 
   window.api.onAutoScan((dir) => {
     if (!dir) return;
-    scanRoots([dir], '指定文件夹');
+    scanRoots([dir], t('label.picked'));
   });
 
   // 监控状态与「发现新文件」推送
@@ -226,7 +226,7 @@ async function init() {
   window.api.onWatchFound(async (entry) => {
     await loadWatchStatus();
     if (entry && entry.count) {
-      toast(`发现 ${entry.count} 个新文件，已经分好类了`);
+      toast(t('msg.watchFound', { n: entry.count }));
     }
   });
 
@@ -245,7 +245,7 @@ function bindEvents() {
   $('#btnScanScope').addEventListener('click', () => {
     if (state.busy) {
       window.api.cancelScan();
-      $('#statusText').textContent = '正在停止…';
+      $('#statusText').textContent = t('prog.stopping');
       return;
     }
     openDiskModal();
@@ -268,7 +268,7 @@ function bindEvents() {
     if (!item) return;
     const root = item.dataset.root;
     closeDiskModal();
-    scanRoots([root], `${root} 全盘`);
+    scanRoots([root], `${root}${LANG === 'zh' ? ' 全盘' : ' (whole drive)'}`);
   });
 
   $('#navTabs').addEventListener('click', (e) => {
@@ -314,7 +314,7 @@ function bindEvents() {
     const last = (state.watch.recent || [])[0];
     if (!last) return;
     // 新文件就在刚才盯的目录里，点一下直接扫它
-    scanRoots([last.dir], '自动监控发现的');
+    scanRoots([last.dir], t('label.fromWatch'));
   });
 
   $('#btnOnboardOk').addEventListener('click', async () => {
@@ -388,14 +388,14 @@ function bindEvents() {
     try {
       await window.api.openTrash();
     } catch (err) {
-      toast(`打开失败：${err.message}`, true);
+      toast(t('msg.openFail', { msg: err.message }), true);
     }
   });
   $('#btnClearTrashLog').addEventListener('click', async () => {
-    if (!window.confirm('只是清掉这份「清理记录」，回收站里的文件不会动。确定吗？')) return;
+    if (!window.confirm(t('msg.confirmClearLog'))) return;
     await window.api.trashClearLog();
     await renderTrash();
-    toast('记录已清空，文件还在系统回收站里');
+    toast(t('msg.trashLogCleared'));
   });
 
   $('#btnPreviewOpen').addEventListener('click', () => {
@@ -456,13 +456,13 @@ function bindEvents() {
 /* ---------------- 扫描 ---------------- */
 async function openDiskModal() {
   $('#diskModal').classList.remove('hidden');
-  $('#diskList').innerHTML = '<div class="disk-empty">正在读取磁盘…</div>';
+  $('#diskList').innerHTML = `<div class="disk-empty">${t('disk.reading')}</div>`;
   try {
     const disks = await window.api.listDisks();
     state.disks = disks;
     renderDiskList(disks);
   } catch (err) {
-    $('#diskList').innerHTML = `<div class="disk-empty">读取磁盘失败：${esc(err.message)}</div>`;
+    $('#diskList').innerHTML = `<div class="disk-empty">${t('disk.readFail', { msg: esc(err.message) })}</div>`;
   }
 }
 
@@ -472,22 +472,22 @@ function closeDiskModal() {
 
 function renderDiskList(disks) {
   if (!disks.length) {
-    $('#diskList').innerHTML = '<div class="disk-empty">没有找到可扫描的磁盘</div>';
+    $('#diskList').innerHTML = `<div class="disk-empty">${t('disk.none')}</div>`;
     return;
   }
   $('#diskList').innerHTML = disks
     .map((d) => {
       const used = d.total ? Math.max(2, Math.round(((d.total - d.free) / d.total) * 100)) : 0;
-      const sys = d.letter.toUpperCase() === 'C' ? '（系统盘）' : '';
-      const sizeText = d.total ? `共 ${fmtSize(d.total)} · 可用 ${fmtSize(d.free)}` : '容量未知';
+      const sys = d.letter.toUpperCase() === 'C' ? (LANG === 'zh' ? '（系统盘）' : ' (system)') : '';
+      const sizeText = d.total ? t('disk.size', { total: fmtSize(d.total), free: fmtSize(d.free) }) : t('disk.unknown');
       return `<button class="disk-item" data-root="${esc(d.root)}" type="button">
         <span class="disk-icon">${esc(d.letter)}:</span>
         <span class="disk-info">
-          <span class="disk-name">${esc(d.letter)}: 盘${sys}</span>
+          <span class="disk-name">${esc(d.letter)}:${LANG === 'zh' ? ' 盘' : ' drive'}${sys}</span>
           <span class="disk-meta">${sizeText}</span>
           <span class="disk-bar"><span style="width:${used}%"></span></span>
         </span>
-        <span class="btn btn-primary btn-sm">扫这个盘</span>
+        <span class="btn btn-primary btn-sm">${t('disk.scanThis')}</span>
       </button>`;
     })
     .join('');
@@ -504,33 +504,33 @@ async function quickScan() {
     }
   }
   const roots = [p.desktop, p.downloads, p.documents].filter(Boolean);
-  if (!roots.length) return toast('没找到常用文件夹，请用「扫描整个电脑」', true);
-  await scanRoots(roots, '桌面 + 下载 + 文档');
+  if (!roots.length) return toast(t('msg.noCommon'), true);
+  await scanRoots(roots, t('label.common'));
 }
 
 async function pickFolder() {
   const dir = await window.api.pickFolder();
   if (!dir) return;
-  await scanRoots([dir], '指定文件夹');
+  await scanRoots([dir], t('label.picked'));
 }
 
 async function scanRoots(roots, label) {
   if (state.busy) return;
   setBusy(true);
-  $('#statusText').textContent = `正在扫描${label}…`;
+  $('#statusText').textContent = t('prog.scanningAt', { where: label });
   try {
     const scan = await window.api.scan({ roots });
     applyScan(scan);
     const s = scan.summary || {};
     if (s.cancelled) {
-      toast(`扫描已停止，已经找到 ${s.files || 0} 个文件`);
+      toast(t('msg.scanStopped', { n: s.files || 0 }));
     } else {
-      toast(`扫描完成：找到 ${s.files || 0} 个文件，用时 ${((scan.durationMs || 0) / 1000).toFixed(1)} 秒`);
+      toast(t('msg.scanDone', { n: s.files || 0, sec: ((scan.durationMs || 0) / 1000).toFixed(1) }));
     }
-    if (scan.truncated) toast('文件太多，达到上限了。可以在设置里调大「最大文件数」。', true);
+    if (scan.truncated) toast(t('msg.tooMany'), true);
   } catch (err) {
-    toast(`扫描失败：${err.message}`, true);
-    $('#statusText').textContent = '扫描失败';
+    toast(t('msg.scanFail', { msg: err.message }), true);
+    $('#statusText').textContent = t('prog.scanFailed');
   } finally {
     setBusy(false);
     $('#progressBar').classList.add('hidden');
@@ -651,10 +651,20 @@ function renderViewSummary() {
     const tags = topTags(list, 5);
     // 重复副本会被判成「可删」，分类已经变了，所以这里按重复标记统计
     const hiddenDup = state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate).length;
-    const dupNote = hiddenDup ? `　另有 <b>${hiddenDup}</b> 个重复副本没列在这里，去「重复文件」页能统一处理` : '';
-    el.innerHTML = `知识库里已经有 <b>${list.length}</b> 份资料，共约 <b>${chars.toLocaleString()}</b> 字${
-      tags.length ? `。常见主题：<b>${tags.map(esc).join('、')}</b>` : ''
-    }。${dupNote}`;
+    const dupNote = hiddenDup
+      ? LANG === 'zh'
+        ? `　另有 <b>${hiddenDup}</b> 个重复副本没列在这里，去「重复文件」页能统一处理`
+        : `　<b>${hiddenDup}</b> duplicate copies are not listed here — handle them in the Duplicates tab`
+      : '';
+    const tagText = tags.length
+      ? LANG === 'zh'
+        ? `。常见主题：<b>${tags.map(esc).join('、')}</b>`
+        : `. Common topics: <b>${tags.map(esc).join(', ')}</b>`
+      : '';
+    el.innerHTML =
+      LANG === 'zh'
+        ? `知识库里已经有 <b>${list.length}</b> 份资料，共约 <b>${chars.toLocaleString()}</b> 字${tagText}。${dupNote}`
+        : `Knowledge has <b>${list.length}</b> documents, about <b>${chars.toLocaleString()}</b> characters${tagText}.${dupNote}`;
     return;
   }
 
@@ -673,9 +683,14 @@ function renderViewSummary() {
       .slice(0, 4)
       .map(([l, c]) => `${l} ${c}`)
       .join(' · ');
-    el.innerHTML = `工具库里 <b>${list.length}</b> 个脚本：常用 <span class="ok">${common}</span> 个、一次性 <span class="warn">${onetime}</span> 个${
-      langText ? `。语言：${esc(langText)}` : ''
-    }。${hiddenDup ? `　另有 <b>${hiddenDup}</b> 个重复副本没列在这里` : ''}`;
+    el.innerHTML =
+      LANG === 'zh'
+        ? `工具库里 <b>${list.length}</b> 个脚本：常用 <span class="ok">${common}</span> 个、一次性 <span class="warn">${onetime}</span> 个${
+            langText ? `。语言：${esc(langText)}` : ''
+          }。${hiddenDup ? `　另有 <b>${hiddenDup}</b> 个重复副本没列在这里` : ''}`
+        : `<b>${list.length}</b> scripts: <span class="ok">${common}</span> reusable, <span class="warn">${onetime}</span> one-off${
+            langText ? `. Languages: ${esc(langText)}` : ''
+          }.${hiddenDup ? `　<b>${hiddenDup}</b> duplicates are not listed here` : ''}`;
     return;
   }
 
@@ -683,9 +698,12 @@ function renderViewSummary() {
     const list = baseViewFiles();
     const free = list.reduce((n, f) => n + (f.size || 0), 0);
     const groups = (s.duplicateStats && s.duplicateStats.groups) || 0;
-    el.innerHTML = `发现 <b>${groups}</b> 组重复，共 <b>${list.length}</b> 个多余文件，处理掉能腾出 <span class="warn">${fmtSize(
-      free
-    )}</span>。`;
+    el.innerHTML =
+      LANG === 'zh'
+        ? `发现 <b>${groups}</b> 组重复，共 <b>${list.length}</b> 个多余文件，处理掉能腾出 <span class="warn">${fmtSize(free)}</span>。`
+        : `<b>${groups}</b> duplicate groups, <b>${list.length}</b> redundant files — cleaning them frees <span class="warn">${fmtSize(
+            free
+          )}</span>.`;
   }
 }
 
@@ -696,7 +714,7 @@ function renderMiniChart() {
 
   if (!s || !s.bySource || !s.bySource.length) {
     box.innerHTML = `<svg viewBox="0 0 60 60" width="56" height="56" class="mini-donut"><circle cx="30" cy="30" r="23" fill="none" stroke="#e6ebf5" stroke-width="10"/></svg>
-      <div class="mini-legend"><span class="mini-legend-empty">扫描后显示<br>AI 来源分布</span></div>`;
+      <div class="mini-legend"><span class="mini-legend-empty">${t('chart.afterScan')}<br>${t('chart.sourceDist')}</span></div>`;
     return;
   }
 
@@ -916,7 +934,7 @@ function highlightHit(text, q) {
 }
 
 function rowCells(f) {
-  const cat = f.category || { key: 'other', label: '其他', retention: '按需留存' };
+  const cat = f.category || { key: 'other', label: '', retention: '' };
   const extLabel = (f.ext || '').replace('.', '').slice(0, 5) || 'FILE';
   const dup = f.duplicate && f.duplicate.isDuplicate;
 
@@ -924,7 +942,7 @@ function rowCells(f) {
   const hit = state.filter.q ? state.contentHits.get(f.path) : null;
   const hitLine = hit
     ? `<div class="hit-line" title="${esc(hit.snippet)}">${highlightHit(hit.snippet, state.filter.q)}${
-        hit.count > 1 ? ` <span class="hit-count">共 ${hit.count} 处</span>` : ''
+        hit.count > 1 ? ` <span class="hit-count">${t('search.hitCount', { n: hit.count })}</span>` : ''
       }</div>`
     : '';
 
@@ -944,14 +962,14 @@ function rowCells(f) {
             .map((t) => `<span class="tag-chip" title="${esc(t)}">${esc(t)}</span>`)
             .join('')}</span>`
         : '<span class="cell-text">—</span>',
-      c4: `<span class="cell-num">${(f.chars || 0).toLocaleString()} 字</span>`
+      c4: `<span class="cell-num">${(f.chars || 0).toLocaleString()} ${t('unit.chars')}</span>`
     };
   }
 
   if (state.view === 'tools') {
     return {
       name: nameCell,
-      c3: `<span class="cat-badge cat-${esc(cat.key)}">${esc(cat.key === 'tool-common' ? '常用工具' : '一次性脚本')}</span>`,
+      c3: `<span class="cat-badge cat-${esc(cat.key)}">${esc(cat.key === 'tool-common' ? t('cat.toolCommon') : t('cat.toolOneTime'))}</span>`,
       c4: `<span class="cell-text">${esc(langOf(f.ext))}</span>`
     };
   }
@@ -960,7 +978,7 @@ function rowCells(f) {
     const sim = dup ? Math.round((f.duplicate.similarity || 1) * 100) : 100;
     return {
       name: nameCell,
-      c3: `<span class="cell-num">${f.duplicate && f.duplicate.kind === 'exact' ? '完全相同' : `${sim}% 相似`}</span>`,
+      c3: `<span class="cell-num">${f.duplicate && f.duplicate.kind === 'exact' ? t('dup.exact') : t('dup.similar', { p: sim })}</span>`,
       c4: `<span class="cell-text" title="${esc((f.duplicate && f.duplicate.withName) || '')}">${esc(
         (f.duplicate && f.duplicate.withName) || '—'
       )}</span>`
@@ -1139,28 +1157,28 @@ async function toggleWatch() {
   try {
     if (w.enabled) {
       await window.api.watchStop();
-      toast('已停止监控');
+      toast(t('msg.watchStopped'));
     } else {
-      if (!w.dirs || !w.dirs.length) return toast('先点「选一个文件夹」', true);
+      if (!w.dirs || !w.dirs.length) return toast(t('msg.watchPickFirst'), true);
       const r = await window.api.watchStart(w.dirs);
-      if (!r || !r.ok) return toast((r && r.error) || '开启失败', true);
-      toast(`已开始盯 ${r.dirs.length} 个文件夹`);
+      if (!r || !r.ok) return toast(t('msg.watchStartFail'), true);
+      toast(t('msg.watchStarted', { n: r.dirs.length }));
     }
     await loadWatchStatus();
   } catch (err) {
-    toast(`操作失败：${err.message}`, true);
+    toast(t('msg.opFail', { msg: err.message }), true);
   }
 }
 
 async function addWatchDir() {
   const r = await window.api.watchPickDir();
   if (!r || !r.ok) return;
-  if (state.watch.dirs.includes(r.dir)) return toast('这个文件夹已经在盯了');
+  if (state.watch.dirs.includes(r.dir)) return toast(t('msg.watchDup'));
   state.watch.dirs.push(r.dir);
   refreshWatchUI();
   if (state.watch.enabled) {
     const s2 = await window.api.watchStart(state.watch.dirs);
-    if (!s2 || !s2.ok) return toast((s2 && s2.error) || '更新监控失败', true);
+    if (!s2 || !s2.ok) return toast(t('msg.watchUpdateFail'), true);
   }
   await loadWatchStatus();
 }
@@ -1190,19 +1208,19 @@ async function selectFile(id) {
   ];
   if (f.duplicate && f.duplicate.isDuplicate) {
     chips.push(
-      `<span class="meta-chip" style="color:#dc2626;border-color:#f6d5d5;background:#fef2f2">重复 · 保留：<b>${esc(
+      `<span class="meta-chip" style="color:#dc2626;border-color:#f6d5d5;background:#fef2f2">${t('prev.dupKeep')}<b>${esc(
         f.duplicate.withName || ''
       )}</b></span>`
     );
   }
-  if (f.aiSummary) chips.push(`<span class="meta-chip" style="color:#4338ca">摘要 <b>${esc(f.aiSummary)}</b></span>`);
+  if (f.aiSummary) chips.push(`<span class="meta-chip" style="color:#4338ca">${t('prev.summary')} <b>${esc(f.aiSummary)}</b></span>`);
   $('#previewMeta').innerHTML = chips.join('');
 
-  $('#previewText').textContent = '读取中…';
+  $('#previewText').textContent = t('prev.loading');
   const r = await window.api.preview(f.path);
   if (r && r.ok) {
-    const raw = r.text || '（空文件）';
-    const tail = r.truncated ? '\n\n…（内容较长，只显示前 30 万字符）' : '';
+    const raw = r.text || t('prev.empty');
+    const tail = r.truncated ? '\n\n' + t('prev.truncated') : '';
     const q = state.filter.q;
     // 带着搜索词打开时，把命中的词就地标出来，并滚到第一处
     if (q && q.length >= 2 && raw.toLowerCase().includes(q.toLowerCase())) {
@@ -1215,7 +1233,7 @@ async function selectFile(id) {
       $('#previewText').textContent = raw + tail;
     }
   } else {
-    $('#previewText').textContent = (r && r.error) || '无法预览';
+    $('#previewText').textContent = (r && r.error) || t('prev.fail');
   }
 }
 
@@ -1229,7 +1247,7 @@ async function ensureArchiveRoot() {
   if (root) return root;
   const docs = (state.appPaths && state.appPaths.documents) || '';
   if (!docs) return '';
-  root = `${docs}\\AI产出管家归档`;
+  root = `${docs}\\${LANG === 'zh' ? 'AI产出管家归档' : 'AI-Artifacts'}`;
   try {
     await window.api.configPatch({ archiveRoot: root });
     state.config = await window.api.configGet();
@@ -1245,22 +1263,26 @@ function archiveMode() {
 
 async function doArchive() {
   const paths = selectedPaths();
-  if (!paths.length) return toast('先在左边勾选要归档的文件', true);
+  if (!paths.length) return toast(t('msg.pickFiles'), true);
   const root = await ensureArchiveRoot();
-  if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
+  if (!root) return toast(t('msg.noArchiveRoot'), true);
   const mode = archiveMode();
   const tip =
     mode === 'copy'
-      ? `把 ${paths.length} 个文件【复制】到：\n${root}\n\n原文件会留着。确定吗？`
-      : `把 ${paths.length} 个文件【移动】到：\n${root}\n\n原位置不再保留，会按分类建文件夹。确定吗？`;
+      ? LANG === 'zh'
+        ? `把 ${paths.length} 个文件【复制】到：\n${root}\n\n原文件会留着。确定吗？`
+        : `Copy ${paths.length} files to:\n${root}\n\nOriginals stay where they are. Continue?`
+      : LANG === 'zh'
+      ? `把 ${paths.length} 个文件【移动】到：\n${root}\n\n原位置不再保留，会按分类建文件夹。确定吗？`
+      : `Move ${paths.length} files to:\n${root}\n\nOriginals will not stay; subfolders are created by category. Continue?`;
   if (!window.confirm(tip)) return;
 
   try {
     const r = await window.api.archive({ paths, targetDir: root, mode });
     removeFromState(mode === 'move' ? r.done || [] : []);
-    toast(`归档完成：成功 ${r.ok} 个，失败 ${r.failed.length} 个。`);
+    toast(t('msg.archiveDone', { ok: r.ok, fail: r.failed.length }));
   } catch (err) {
-    toast(`归档失败：${err.message}`, true);
+    toast(t('msg.archiveFail', { msg: err.message }), true);
   }
 }
 
@@ -1268,22 +1290,22 @@ async function archiveCurrent() {
   const f = currentFile();
   if (!f) return;
   const root = await ensureArchiveRoot();
-  if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
+  if (!root) return toast(t('msg.noArchiveRoot'), true);
   try {
     const r = await window.api.archive({ paths: [f.path], targetDir: root, mode: archiveMode() });
     if (r.ok) {
       removeFromState(r.done || []);
-      toast('这个文件已经归档好了');
+      toast(t('msg.alreadyArchived'));
     } else {
-      toast('归档失败：' + ((r.failed[0] && r.failed[0].error) || '未知原因'), true);
+      toast(t('msg.archiveFail', { msg: (r.failed[0] && r.failed[0].error) || t('msg.unknownReason') }), true);
     }
   } catch (err) {
-    toast(`归档失败：${err.message}`, true);
+    toast(t('msg.archiveFail', { msg: err.message }), true);
   }
 }
 
 async function doOneClickOrganize() {
-  if (!state.files.length) return toast('先扫描一次再整理', true);
+  if (!state.files.length) return toast(t('msg.scanFirstTidy'), true);
 
   const keep = state.files.filter(
     (f) => f.category && (f.category.group === 'knowledge' || f.category.group === 'tool')
@@ -1306,24 +1328,37 @@ async function doOneClickOrganize() {
   const trashList = Array.from(trashMap.values());
 
   if (!keepList.length && !trashList.length) {
-    return toast(similarDups.length ? '没有可自动整理的；有相似文件需要你手动确认' : '没有需要整理的文件，挺干净的');
+    return toast(similarDups.length ? t('msg.tidyOnlySimilar') : t('msg.tidyNothing'));
   }
 
   const root = await ensureArchiveRoot();
-  if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
+  if (!root) return toast(t('msg.noArchiveRoot'), true);
 
   const sample = trashList.slice(0, 5).map((f) => `· ${f.name}`).join('\n');
-  const more = trashList.length > 5 ? `\n…还有 ${trashList.length - 5} 个` : '';
+  const more =
+    trashList.length > 5
+      ? LANG === 'zh'
+        ? `\n…还有 ${trashList.length - 5} 个`
+        : `\n…and ${trashList.length - 5} more`
+      : '';
   const similarNote = similarDups.length
-    ? `\n\n③ 另外有 ${similarDups.length} 个「相似但不完全相同」的文件，管家不会自动动它们，\n   你可以到「重复文件」页逐个看。`
+    ? LANG === 'zh'
+      ? `\n\n③ 另外有 ${similarDups.length} 个「相似但不完全相同」的文件，管家不会自动动它们，\n   你可以到「重复文件」页逐个看。`
+      : `\n\n3) ${similarDups.length} near-identical files are left alone.\n   Review them yourself in the Duplicates tab.`
     : '';
 
   const ok = window.confirm(
-    `管家准备这样做：\n\n` +
-      `① 把 ${keepList.length} 个「值得留的知识 / 能用的工具」移动到：\n${root}\n\n` +
-      `② 把 ${trashList.length} 个「完全相同 / 可以删的」删掉（进 Windows 回收站，能还原）：\n${sample}${more}` +
-      similarNote +
-      `\n\n确定就点「确定」，不确定就点「取消」。`
+    LANG === 'zh'
+      ? `管家准备这样做：\n\n` +
+          `① 把 ${keepList.length} 个「值得留的知识 / 能用的工具」移动到：\n${root}\n\n` +
+          `② 把 ${trashList.length} 个「完全相同 / 可以删的」删掉（进 Windows 回收站，能还原）：\n${sample}${more}` +
+          similarNote +
+          `\n\n确定就点「确定」，不确定就点「取消」。`
+      : `Here's the plan:\n\n` +
+          `1) Move ${keepList.length} files worth keeping to:\n${root}\n\n` +
+          `2) Delete ${trashList.length} identical/disposable files (they go to the Windows Recycle Bin, restorable):\n${sample}${more}` +
+          similarNote +
+          `\n\nHit OK to proceed, Cancel to stop.`
   );
   if (!ok) return;
 
@@ -1353,9 +1388,9 @@ async function doOneClickOrganize() {
       }
     }
     renderAll();
-    toast(`整理完成：${archived} 个归档，${trashed} 个进了系统回收站。想找回就打开回收站还原。`);
+    toast(t('msg.tidyDone', { a: archived, t: trashed }));
   } catch (err) {
-    toast(`整理失败：${err.message}`, true);
+    toast(t('msg.tidyFail', { msg: err.message }), true);
   } finally {
     setBusy(false);
   }
@@ -1379,25 +1414,27 @@ function removeFromState(doneList, rerender = true) {
 
 async function doExport() {
   // 没有扫描结果时，点导出应提示先扫描
-  if (!state.files.length) return toast('先扫描一次再导出', true);
+  if (!state.files.length) return toast(t('msg.scanFirstExport'), true);
   const paths = selectedPaths();
   const list = paths.length ? state.files.filter((f) => state.selection.has(f.id)) : state.filtered;
-  if (!list.length) return toast('当前没有可导出的文件', true);
+  if (!list.length) return toast(t('msg.nothingToExport'), true);
   try {
     const out = await window.api.pickSave({
-      title: '导出清单',
-      defaultName: paths.length ? 'AI产出清单_选中.md' : 'AI产出清单.md',
+      title: t('msg.exportTitle'),
+      defaultName: paths.length
+        ? `${LANG === 'zh' ? 'AI产出清单_选中' : 'AI-artifacts-selected'}.md`
+        : `${LANG === 'zh' ? 'AI产出清单' : 'AI-artifacts'}.md`,
       filters: [
-        { name: 'Markdown 表格', extensions: ['md'] },
-        { name: 'CSV（Excel 可打开）', extensions: ['csv'] }
+        { name: t('msg.exportMd'), extensions: ['md'] },
+        { name: t('msg.exportCsv'), extensions: ['csv'] }
       ]
     });
     if (!out) return;
     const format = out.toLowerCase().endsWith('.csv') ? 'csv' : 'md';
     const saved = await window.api.exportRun({ format, paths: list.map((f) => f.path), outPath: out });
-    toast(`已导出：${saved}`);
+    toast(t('msg.exported', { path: saved }));
   } catch (err) {
-    toast(`导出失败：${err.message}`, true);
+    toast(t('msg.exportFail', { msg: err.message }), true);
   }
 }
 
@@ -1411,18 +1448,23 @@ async function doCleanDuplicates() {
 
   if (!exact.length) {
     if (similar.length) {
-      return toast(`没有完全相同的文件；有 ${similar.length} 个相似文件，请到「重复文件」页逐个确认`);
+      return toast(t('msg.onlySimilarDup', { n: similar.length }));
     }
-    return toast('没有发现重复文件');
+    return toast(t('msg.noDup'));
   }
 
   const size = exact.reduce((s, f) => s + f.size, 0);
   const similarNote = similar.length
-    ? `\n\n另有 ${similar.length} 个「相似但不完全相同」的文件，管家不会自动删，你可以到「重复文件」页逐个看。`
+    ? LANG === 'zh'
+      ? `\n\n另有 ${similar.length} 个「相似但不完全相同」的文件，管家不会自动删，你可以到「重复文件」页逐个看。`
+      : `\n\nThere are also ${similar.length} near-identical files. They are NOT auto-deleted — review them in the Duplicates tab.`
     : '';
   const ok = window.confirm(
-    `发现 ${exact.length} 个内容完全相同的文件，可释放约 ${fmtSize(size)}。\n\n` +
-      `会把多余的删掉（进 Windows 回收站，能在回收站里还原），每组保留一份。${similarNote}\n\n确定吗？`
+    LANG === 'zh'
+      ? `发现 ${exact.length} 个内容完全相同的文件，可释放约 ${fmtSize(size)}。\n\n` +
+          `会把多余的删掉（进 Windows 回收站，能在回收站里还原），每组保留一份。${similarNote}\n\n确定吗？`
+      : `Found ${exact.length} byte-identical files, about ${fmtSize(size)}.\n\n` +
+          `Extras go to the Windows Recycle Bin (restorable); one copy per group is kept.${similarNote}\n\nContinue?`
   );
   if (!ok) return;
 
@@ -1436,10 +1478,10 @@ async function doCleanDuplicates() {
         true
       );
     } else {
-      toast(`已删 ${r.ok} 个，释放约 ${fmtSize(size)}。都进了 Windows 回收站，能还原。`);
+      toast(t('msg.cleanDone', { n: r.ok, size: fmtSize(size) }));
     }
   } catch (err) {
-    toast(`清理失败：${err.message}`, true);
+    toast(t('msg.cleanFail', { msg: err.message }), true);
   }
 }
 
@@ -1533,7 +1575,7 @@ function aiConfigured() {
 
 function ensureAi() {
   if (aiConfigured()) return true;
-  toast('还没配 AI。打开设置 → AI 接入，先连本地 Ollama，或填自己的 API。');
+  toast(t('msg.noAi'));
   return false;
 }
 
@@ -1553,33 +1595,44 @@ function aiPrivacyConfirmed() {
 
 async function runAi(kind) {
   const f = currentFile();
-  if (!f) return toast('先选一个文件', true);
+  if (!f) return toast(t('msg.pickAFile'), true);
   if (!ensureAi()) return;
   if (!aiPrivacyConfirmed()) return;
 
   const box = $('#aiResult');
-  const labels = { summary: '生成摘要', rename: '想新名字', tags: '打标签', category: '复核分类' };
+  const labels = {
+      summary: LANG === 'zh' ? '生成摘要' : 'summarizing',
+      rename: LANG === 'zh' ? '想新名字' : 'suggesting a name',
+      tags: LANG === 'zh' ? '打标签' : 'tagging',
+      category: LANG === 'zh' ? '复核分类' : 're-checking the category'
+    };
   box.classList.remove('hidden');
   box.style.borderColor = '';
   box.style.background = '';
   box.style.color = '';
-  box.textContent = `AI 正在${labels[kind]}…`;
+  box.textContent = LANG === 'zh' ? `AI 正在${labels[kind]}…` : `AI is ${labels[kind]}…`;
 
   try {
     if (kind === 'summary') {
       const r = await window.api.aiSummarize({ path: f.path });
       f.aiSummary = r.summary;
-      box.innerHTML = `<b>一句话摘要：</b>${esc(r.summary)}`;
+      box.innerHTML = `<b>${LANG === 'zh' ? '一句话摘要：' : 'Summary:'}</b>${esc(r.summary)}`;
     } else if (kind === 'rename') {
       const r = await window.api.aiRename({ path: f.path });
-      box.innerHTML = `<b>建议文件名：</b>${esc(r.name)}
+      box.innerHTML = `<b>${LANG === 'zh' ? '建议文件名：' : 'Suggested name:'}</b>${esc(r.name)}
         <div style="margin-top:8px">
-          <button class="btn btn-primary btn-sm" data-ai-action="rename" data-value="${esc(r.name)}">执行重命名</button>
-          <span style="font-size:11px;color:#7c7fb0;margin-left:6px">只改文件名，不动内容</span>
+          <button class="btn btn-primary btn-sm" data-ai-action="rename" data-value="${esc(r.name)}">${
+        LANG === 'zh' ? '执行重命名' : 'Rename'
+      }</button>
+          <span style="font-size:11px;color:#7c7fb0;margin-left:6px">${
+        LANG === 'zh' ? '只改文件名，不动内容' : 'filename only'
+      }</span>
         </div>`;
     } else if (kind === 'tags') {
       const r = await window.api.aiTags({ path: f.path });
-      box.innerHTML = `<b>内容标签：</b>${r.tags.map((t) => `<span class="meta-chip">${esc(t)}</span>`).join(' ')}
+      box.innerHTML = `<b>${LANG === 'zh' ? '内容标签：' : 'Tags:'}</b>${r.tags
+      .map((tg) => `<span class="meta-chip">${esc(tg)}</span>`)
+      .join(' ')}
         <div style="margin-top:8px"><button class="btn btn-primary btn-sm" data-ai-action="tags" data-value="${esc(
           r.tags.join(',')
         )}">保存标签</button></div>`;
@@ -1592,17 +1645,19 @@ async function runAi(kind) {
         junk: '冗余可删（建议清理）'
       };
       box.innerHTML = r.category
-        ? `<b>AI 复核结果：</b>${esc(map[r.category] || r.category)}
+        ? `<b>${LANG === 'zh' ? 'AI 复核结果：' : 'AI suggests:'}</b>${esc(map[r.category] || r.category)}
            <div style="margin-top:8px">
-             <button class="btn btn-primary btn-sm" data-ai-action="category" data-value="${esc(r.category)}">应用此分类</button>
+             <button class="btn btn-primary btn-sm" data-ai-action="category" data-value="${esc(r.category)}">${
+        LANG === 'zh' ? '应用此分类' : 'Apply'
+      }</button>
              <span style="font-size:11px;color:#7c7fb0;margin-left:6px">当前是「${esc(
                f.category ? f.category.label : '—'
              )}」</span>
            </div>`
-        : 'AI 没给出明确分类，保持原判。';
+        : LANG === 'zh' ? 'AI 没给出明确分类，保持原判。' : 'AI had no clear answer — keeping the current category.';
     }
   } catch (err) {
-    box.textContent = `AI 调用失败：${err.message}`;
+    box.textContent = LANG === 'zh' ? `AI 调用失败：${err.message}` : `AI call failed: ${err.message}`;
     box.style.borderColor = '#f3c9c9';
     box.style.background = '#fef2f2';
     box.style.color = '#b91c1c';
@@ -1619,12 +1674,19 @@ async function onAiAction(e) {
   try {
     if (action === 'rename') {
       const newName = btn.dataset.value;
-      if (!window.confirm(`把「${f.name}」改名为「${newName}」？\n\n只改文件名，不动内容。`)) return;
+      if (
+        !window.confirm(
+          LANG === 'zh'
+            ? `把「${f.name}」改名为「${newName}」？\n\n只改文件名，不动内容。`
+            : `Rename "${f.name}" to "${newName}"?\n\nOnly the filename changes; content is untouched.`
+        )
+      )
+        return;
       const r = await window.api.renameFile({ path: f.path, name: newName });
       f.name = r.name;
       f.path = r.path;
       f.ext = (r.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
-      toast(`已改名为：${r.name}`);
+      toast(t('msg.renamed', { name: r.name }));
       renderList();
       selectFile(f.id);
     } else if (action === 'tags') {
@@ -1634,18 +1696,18 @@ async function onAiAction(e) {
         f.category = { key: 'other', group: 'other', label: '其他文件', retention: '按需留存', reason: '', tags: [] };
       }
       f.category.tags = tags;
-      toast('标签已保存');
+      toast(t('msg.tagsSaved'));
       renderList();
       selectFile(f.id);
     } else if (action === 'category') {
       const r = await window.api.aiApplyCategory({ path: f.path, category: btn.dataset.value });
       f.category = r.category;
-      toast(`已改成：${r.category.label}`);
+      toast(t('msg.recategorized', { cat: catLabel(f) }));
       renderAll();
       selectFile(f.id);
     }
   } catch (err) {
-    toast(`操作失败：${err.message}`, true);
+    toast(t('msg.opFail', { msg: err.message }), true);
   }
 }
 
@@ -1710,10 +1772,10 @@ async function saveAi() {
     await window.api.aiSave(patch);
     state.config = await window.api.configGet();
     $('#setAiKey').value = '';
-    toast('AI 配置已保存（只存在你本机）');
+    toast(t('msg.aiSaved'));
     $('#aiTestStatus').textContent = '';
   } catch (err) {
-    toast(`保存失败：${err.message}`, true);
+    toast(t('msg.saveFail', { msg: err.message }), true);
   }
 }
 
@@ -1789,9 +1851,9 @@ async function saveGeneral() {
   try {
     await window.api.configPatch(patch);
     state.config = await window.api.configGet();
-    toast('设置已保存');
+    toast(t('msg.settingsSaved'));
   } catch (err) {
-    toast(`保存失败：${err.message}`, true);
+    toast(t('msg.saveFail', { msg: err.message }), true);
   }
 }
 
@@ -1812,7 +1874,7 @@ async function setContextMenu(install) {
     await refreshCtxStatus();
     toast(install ? '已安装右键扫描：在资源管理器里右键文件夹试试' : '已卸载右键菜单');
   } catch (err) {
-    toast(`操作失败：${err.message}`, true);
+    toast(t('msg.opFail', { msg: err.message }), true);
   }
 }
 
@@ -1836,7 +1898,7 @@ async function toggleMcp() {
   try {
     if (state.mcp && state.mcp.running) {
       await window.api.mcpStop();
-      toast('MCP 已关闭');
+      toast(t('msg.mcpOff'));
     } else {
       const r = await window.api.mcpStart();
       toast(`MCP 已开启：${r.endpoint || '端口已监听'}`);
@@ -1851,9 +1913,9 @@ async function copyMcpConfig() {
   const text = $('#mcpConfigText').textContent;
   try {
     await navigator.clipboard.writeText(text);
-    toast('配置已复制，粘贴到 Cursor 的 MCP 设置里');
+    toast(t('msg.mcpCopied'));
   } catch {
-    toast('复制失败，可以手动选中文本复制', true);
+    toast(t('msg.copyFail'), true);
   }
 }
 
@@ -1892,8 +1954,8 @@ function renderCharts() {
   if (!sourceEl || !catEl) return;
 
   if (!s) {
-    sourceEl.innerHTML = '<div class="chart-empty">扫描后显示</div>';
-    catEl.innerHTML = '<div class="chart-empty">扫描后显示</div>';
+    sourceEl.innerHTML = `<div class="chart-empty">${t('chart.afterScan')}</div>`;
+    catEl.innerHTML = `<div class="chart-empty">${t('chart.afterScan')}</div>`;
     return;
   }
 
@@ -1916,7 +1978,7 @@ function renderCharts() {
 
 function renderDonut(container, items, total) {
   if (!items.length) {
-    container.innerHTML = '<div class="chart-empty">没有数据</div>';
+    container.innerHTML = `<div class="chart-empty">${t('chart.noData')}</div>`;
     return;
   }
   const R = 38;
@@ -1947,7 +2009,7 @@ function renderDonut(container, items, total) {
   container.innerHTML = `<div class="donut-wrap">
     <svg class="donut" viewBox="0 0 96 96" width="108" height="108">${segs}
       <text x="48" y="47" text-anchor="middle" class="donut-center-num">${total}</text>
-      <text x="48" y="60" text-anchor="middle" class="donut-center-label">份文件</text>
+      <text x="48" y="60" text-anchor="middle" class="donut-center-label">${t('chart.files')}</text>
     </svg>
     <div class="legend">${legend}</div>
   </div>`;
@@ -1955,7 +2017,7 @@ function renderDonut(container, items, total) {
 
 function renderBars(container, items) {
   if (!items.length) {
-    container.innerHTML = '<div class="chart-empty">没有数据</div>';
+    container.innerHTML = `<div class="chart-empty">${t('chart.noData')}</div>`;
     return;
   }
   container.innerHTML = `<div class="bars">${items
@@ -1973,5 +2035,5 @@ function renderBars(container, items) {
 
 /* ---------------- 启动 ---------------- */
 init().catch((err) => {
-  toast(`初始化失败：${err.message}`, true);
+  toast(t('msg.initFail', { msg: err.message }), true);
 });
