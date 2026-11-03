@@ -86,7 +86,7 @@ SHA-256 for identical files, 3-gram similarity for near-identical ones. Shows th
 
 ### Tidy up
 
-Move (or copy) the keepers into an archive folder, organized by category. Anything deleted goes to the **Windows Recycle Bin** — the same as right-click → Delete. Restore it from there.
+Move the keepers into an archive folder, organized by category — always a move, never a copy: a tidying tool must not leave you with more files than you started. Anything deleted goes to the **Windows Recycle Bin** — the same as right-click → Delete. Restore it from there.
 
 There is no private trash folder. If the system has no Recycle Bin (USB drives, network shares), the app refuses to delete and tells you why.
 
