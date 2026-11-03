@@ -10,18 +10,36 @@ const { createHandler, SERVER_INFO } = require('./mcp-core');
 function createMcpHttpServer(options) {
   const opts = options || {};
   const handle = createHandler(opts);
+  const token = String(opts.token || '');
   let server = null;
   let port = 0;
 
   async function onRequest(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, X-Mcp-Token');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
       return;
+    }
+
+    // 本机鉴权：没有 token 或 token 不对，一律拒绝，防止本机其他程序乱调
+    if (token) {
+      let provided = '';
+      try {
+        const u = new URL(req.url, 'http://127.0.0.1');
+        provided = u.searchParams.get('token') || '';
+      } catch {
+        provided = '';
+      }
+      if (!provided) provided = String(req.headers['x-mcp-token'] || '');
+      if (provided !== token) {
+        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'unauthorized', message: '需要正确的 token' }));
+        return;
+      }
     }
 
     if (req.method === 'GET') {
