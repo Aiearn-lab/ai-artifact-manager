@@ -2,6 +2,7 @@
 
 const fsp = require('fs').promises;
 const path = require('path');
+const { sourceLabel } = require('./source-label');
 
 function fmtSize(bytes) {
   const n = Number(bytes) || 0;
@@ -77,7 +78,7 @@ function toMarkdown(files, summary) {
     lines.push(
       [
         escapeCell(f.name),
-        escapeCell(f.source && f.source.name),
+        escapeCell(sourceLabel(f.source)),
         escapeCell(f.category && f.category.label),
         escapeCell(f.category && f.category.retention),
         fmtSize(f.size),
@@ -109,7 +110,7 @@ function toCsv(files) {
     rows.push(
       [
         csvCell(f.name),
-        csvCell(f.source && f.source.name),
+        csvCell(sourceLabel(f.source)),
         csvCell(f.category && f.category.label),
         csvCell(f.category && f.category.retention),
         csvCell(f.size),
