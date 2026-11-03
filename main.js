@@ -861,7 +861,8 @@ function registerIpc() {
     if (!files.length) throw new Error('没有选中任何文件');
     const root = p.targetDir || configStore.get().archiveRoot;
     if (!root) throw new Error('请先设置归档目录（设置 → 默认归档路径）');
-    return archiver.archive(files, root, { mode: p.mode === 'move' ? 'move' : 'copy' });
+    // 本产品没有复制归档：整理=移动，防止越清越多
+    return archiver.archive(files, root);
   });
 
   ipcMain.handle('duplicate:remove', async (e, payload) => {
