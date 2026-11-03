@@ -331,6 +331,25 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 
 .fname { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .fname-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; font-size: 13.5px; }
+.fname-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* 正文里搜到的片段：一行小字，超出省略，关键词高亮 */
+.hit-line {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #7c8798;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 1px;
+}
+.hit-line mark {
+  background: #fff1b8;
+  color: #8a5a00;
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+.hit-count { color: #a8b1c1; font-size: 10.5px; }
 .fext {
   flex: 0 0 auto;
   font-size: 9.5px;
