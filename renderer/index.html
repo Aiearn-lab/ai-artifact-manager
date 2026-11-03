@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI工件管家 · 智维工作室</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="34" height="34">
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#3b82f6"/>
+                <stop offset="1" stop-color="#6366f1"/>
+              </linearGradient>
+            </defs>
+            <rect x="3" y="6" width="34" height="28" rx="7" fill="url(#lg)"/>
+            <path d="M12 15h9M12 20h16M12 25h12" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".95"/>
+            <circle cx="31" cy="12" r="3.2" fill="#fbbf24"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>AI工件管家</h1>
+          <span class="brand-sub">智维工作室出品</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="scan-box">
+          <button id="btnPickFolder" class="btn btn-ghost" type="button">选择文件夹</button>
+          <input id="scanPath" class="path-input" type="text" readonly placeholder="选一个文件夹开始扫描">
+          <button id="btnScan" class="btn btn-primary" type="button">开始扫描</button>
+        </div>
+        <button id="btnSettings" class="icon-btn" type="button" title="设置">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3.2"/>
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="overview">
+      <div class="stat-cards">
+        <div class="stat-card">
+          <span class="stat-label">扫描到的文件</span>
+          <strong class="stat-value" id="statFiles">—</strong>
+          <span class="stat-note" id="statFilesNote">等待扫描</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">占用空间</span>
+          <strong class="stat-value" id="statSize">—</strong>
+          <span class="stat-note">AI 产出合计</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">预估可清理</span>
+          <strong class="stat-value accent-warn" id="statCleanable">—</strong>
+          <span class="stat-note">草稿 / 空洞 / 重复</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">重复可释放</span>
+          <strong class="stat-value accent-danger" id="statDuplicate">—</strong>
+          <span class="stat-note" id="statDuplicateNote">还没扫</span>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-head">
+            <h3>AI 来源占比</h3>
+            <span class="chart-sub" id="sourceChartSub">按文件数</span>
+          </div>
+          <div class="chart-body" id="sourceChart">
+            <div class="chart-empty">扫描后显示</div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <h3>分类占比</h3>
+            <span class="chart-sub" id="categoryChartSub">按文件数</span>
+          </div>
+          <div class="chart-body" id="categoryChart">
+            <div class="chart-empty">扫描后显示</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="workspace">
+      <section class="list-panel">
+        <div class="list-toolbar">
+          <div class="tabs" id="categoryTabs">
+            <button class="tab active" data-cat="all" type="button">全部 <em id="tabCountAll">0</em></button>
+            <button class="tab" data-cat="knowledge" type="button">知识库 <em id="tabCountKnowledge">0</em></button>
+            <button class="tab" data-cat="tool" type="button">工具脚本 <em id="tabCountTool">0</em></button>
+            <button class="tab" data-cat="junk" type="button">冗余可删 <em id="tabCountJunk">0</em></button>
+            <button class="tab" data-cat="dup" type="button">重复 <em id="tabCountDup">0</em></button>
+            <button class="tab" data-cat="other" type="button">其他 <em id="tabCountOther">0</em></button>
+          </div>
+
+          <div class="filters">
+            <div class="search-wrap">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+              </svg>
+              <input id="searchInput" type="text" placeholder="搜索文件名、路径、标签">
+            </div>
+            <select id="sourceFilter">
+              <option value="all">全部来源</option>
+            </select>
+            <select id="sortSelect">
+              <option value="mtime">按修改时间</option>
+              <option value="size">按文件大小</option>
+              <option value="name">按文件名</option>
+              <option value="chars">按内容长度</option>
+            </select>
+          </div>
+
+          <div class="bulk-actions">
+            <label class="check-inline"><input type="checkbox" id="selectAll"> 全选</label>
+            <button id="btnArchive" class="btn btn-ghost btn-sm" type="button">归档选中</button>
+            <button id="btnExport" class="btn btn-ghost btn-sm" type="button">导出清单</button>
+            <button id="btnCleanDup" class="btn btn-ghost btn-sm btn-danger-ghost" type="button">清理重复</button>
+            <button id="btnOpenTrash" class="btn btn-ghost btn-sm" type="button">回收站</button>
+          </div>
+        </div>
+
+        <div class="table-head" id="tableHead">
+          <span class="col-check"></span>
+          <span class="col-name">文件名</span>
+          <span class="col-source">AI 来源</span>
+          <span class="col-cat">分类</span>
+          <span class="col-retention">留存建议</span>
+          <span class="col-size">大小</span>
+          <span class="col-path">所在路径</span>
+        </div>
+
+        <div class="file-list" id="fileList">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+              <svg viewBox="0 0 64 64" width="64" height="64" fill="none" stroke="#c3cad9" stroke-width="2">
+                <path d="M10 18a4 4 0 0 1 4-4h12l5 6h19a4 4 0 0 1 4 4v24a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4z"/>
+                <path d="M22 36h20M22 43h13"/>
+              </svg>
+            </div>
+            <h3>先选一个文件夹开始</h3>
+            <p>AI工件管家只在你本机运行，不会上传任何文件。<br>建议先扫 <code>下载</code>、<code>桌面</code> 或某个 AI 项目目录。</p>
+            <button id="btnEmptyPick" class="btn btn-primary" type="button">选择文件夹</button>
+            <p class="empty-tip">扫描后可以按分类归档、清理重复文件、导出清单，也能接本地 AI 做摘要和重命名。</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="preview-panel" id="previewPanel">
+        <div class="preview-empty" id="previewEmpty">
+          <div class="preview-empty-icon">
+            <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#c3cad9" stroke-width="2">
+              <rect x="8" y="6" width="32" height="36" rx="4"/>
+              <path d="M16 16h16M16 22h16M16 28h10"/>
+            </svg>
+          </div>
+          <p>点左边任意一个文件<br>这里直接预览内容</p>
+        </div>
+
+        <div class="preview-content hidden" id="previewContent">
+          <div class="preview-head">
+            <div class="preview-title">
+              <h3 id="previewName">—</h3>
+              <p id="previewPath">—</p>
+            </div>
+            <div class="preview-actions">
+              <button id="btnPreviewOpen" class="btn btn-ghost btn-sm" type="button">打开</button>
+              <button id="btnPreviewReveal" class="btn btn-ghost btn-sm" type="button">定位</button>
+            </div>
+          </div>
+
+          <div class="preview-meta" id="previewMeta"></div>
+
+          <div class="preview-tools">
+            <button id="btnAiSummary" class="btn btn-ghost btn-sm btn-ai" type="button">AI 摘要</button>
+            <button id="btnAiRename" class="btn btn-ghost btn-sm btn-ai" type="button">建议重命名</button>
+            <button id="btnAiTags" class="btn btn-ghost btn-sm btn-ai" type="button">AI 打标签</button>
+            <button id="btnAiCategory" class="btn btn-ghost btn-sm btn-ai" type="button">AI 复核分类</button>
+          </div>
+
+          <div class="ai-result hidden" id="aiResult"></div>
+
+          <div class="preview-body">
+            <pre id="previewText"></pre>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusText">就绪</span>
+      <span class="status-right">
+        <a href="#" id="linkHomepage">智维工作室 · zhiweistudio.com.cn</a>
+        <span class="dot">·</span>
+        <span id="statusVersion">v0.1.0</span>
+      </span>
+    </footer>
+
+    <div class="progress-bar hidden" id="progressBar"><span id="progressFill"></span></div>
+  </div>
+
+  <!-- 设置 -->
+  <div class="modal-mask hidden" id="settingsModal">
+    <div class="modal">
+      <header class="modal-head">
+        <h2>设置</h2>
+        <button class="icon-btn" id="btnCloseSettings" type="button" title="关闭">×</button>
+      </header>
+
+      <nav class="settings-tabs" id="settingsTabs">
+        <button class="active" data-tab="general" type="button">常规</button>
+        <button data-tab="ai" type="button">AI 接入</button>
+        <button data-tab="mcp" type="button">MCP 服务</button>
+        <button data-tab="pro" type="button">Pro 版</button>
+        <button data-tab="about" type="button">关于</button>
+      </nav>
+
+      <div class="settings-body">
+        <section class="settings-panel active" data-panel="general">
+          <div class="field">
+            <label>默认归档路径</label>
+            <div class="field-row">
+              <input id="setArchiveRoot" type="text" placeholder="例如 E:\AI工件归档">
+              <button id="btnPickArchiveRoot" class="btn btn-ghost btn-sm" type="button">选择</button>
+            </div>
+            <p class="hint">归档默认是剪切：整理完原位置不再保留。目录内会按「知识库沉淀 / 工具脚本 / 冗余可删」自动建子文件夹；想保留原件可在下面切成「复制」。</p>
+          </div>
+
+          <div class="field">
+            <label>归档方式</label>
+            <select id="setArchiveMode">
+              <option value="move">剪切（推荐，归档后原位置不再保留）</option>
+              <option value="copy">复制（保留原文件，适合做备份）</option>
+            </select>
+          </div>
+
+          <details class="advanced">
+            <summary>高级扫描参数（一般不用改）</summary>
+            <div class="field-row two">
+              <div class="field">
+                <label>最大扫描深度</label>
+                <input id="setMaxDepth" type="number" min="1" max="30" value="14">
+              </div>
+              <div class="field">
+                <label>最大文件数</label>
+                <input id="setMaxFiles" type="number" min="100" max="200000" step="1000" value="50000">
+              </div>
+            </div>
+          </details>
+
+          <div class="field">
+            <label>忽略白名单</label>
+            <textarea id="setWhitelist" rows="3" placeholder="每行一条：C:\Windows 或 .exe（路径或扩展名）"></textarea>
+            <p class="hint">列在这里的路径或扩展名不会被扫描。系统目录、node_modules 等已默认跳过。</p>
+          </div>
+
+          <div class="field">
+            <label>Windows 右键菜单</label>
+            <div class="field-row">
+              <button id="btnCtxInstall" class="btn btn-ghost btn-sm" type="button">安装右键扫描</button>
+              <button id="btnCtxUninstall" class="btn btn-ghost btn-sm" type="button">卸载</button>
+              <span class="inline-status" id="ctxStatus">检测中…</span>
+            </div>
+            <p class="hint">安装后，在资源管理器里右键任意文件夹，可直接用 AI工件管家 扫描。</p>
+          </div>
+
+          <div class="field">
+            <label>Pro 版入口</label>
+            <div class="pro-teaser">
+              <span>自然语言找文件、后台自动归档、批量重命名、Obsidian 导出等</span>
+              <button id="btnOpenPro" class="btn btn-ghost btn-sm" type="button">看看 Pro</button>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button id="btnSaveGeneral" class="btn btn-primary" type="button">保存设置</button>
+          </div>
+        </section>
+
+        <section class="settings-panel" data-panel="ai">
+          <div class="ai-block">
+            <div class="ai-block-head">
+              <h3>一键连本地 AI</h3>
+              <span class="pill pill-free">免费 · 不用密钥</span>
+            </div>
+            <p class="hint">电脑上开着 Ollama 或 LM Studio 并加载了模型，点一下就能用。我们不提供算力，也不收你的 API 费用。</p>
+            <div class="field-row">
+              <button id="btnDetectLocal" class="btn btn-ghost btn-sm" type="button">一键检测本地 AI</button>
+              <span class="inline-status" id="localAiStatus">还没检测</span>
+            </div>
+            <div class="local-ai-list" id="localAiList"></div>
+          </div>
+
+          <div class="ai-block">
+            <div class="ai-block-head">
+              <h3>用自己的 API（OpenAI 兼容）</h3>
+            </div>
+            <div class="field">
+              <label>接口地址</label>
+              <input id="setAiBaseUrl" type="text" placeholder="例如 https://api.deepseek.com/v1 或 http://127.0.0.1:11434/v1">
+            </div>
+            <div class="field-row two">
+              <div class="field">
+                <label>API 密钥</label>
+                <input id="setAiKey" type="password" placeholder="sk-...（只存本机）">
+              </div>
+              <div class="field">
+                <label>模型名</label>
+                <input id="setAiModel" type="text" placeholder="例如 deepseek-chat">
+              </div>
+            </div>
+            <p class="hint">密钥只写进你本机的配置文件，不会上传到任何服务器，也不会写进导出的清单。</p>
+            <div class="field-row">
+              <button id="btnSaveAi" class="btn btn-primary btn-sm" type="button">保存 AI 配置</button>
+              <button id="btnTestAi" class="btn btn-ghost btn-sm" type="button">测试连接</button>
+              <span class="inline-status" id="aiTestStatus"></span>
+            </div>
+          </div>
+
+          <div class="ai-block muted">
+            <h3>AI 能帮你做什么</h3>
+            <ul class="plain-list">
+              <li>把 <code>untitled.md</code> 这种乱名字改成「类型_主题_日期」</li>
+              <li>给每个文件一句大白话摘要，判断该不该留</li>
+              <li>自动打标签，以后按标签筛</li>
+              <li>复核纯规则的分类，减少误判</li>
+              <li>两个相似版本比一比，告诉你留哪份</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="settings-panel" data-panel="mcp">
+          <div class="ai-block">
+            <div class="ai-block-head">
+              <h3>内置 MCP 服务</h3>
+              <span class="inline-status" id="mcpStatus">未启动</span>
+            </div>
+            <p class="hint">开启后，Cursor、Claude 等支持 MCP 的 AI 工具可以检索、整理你的 AI 文件库。服务只监听 127.0.0.1，不对局域网开放。</p>
+            <div class="field-row">
+              <button id="btnMcpToggle" class="btn btn-primary btn-sm" type="button">开启 MCP</button>
+              <span class="mcp-endpoint" id="mcpEndpoint">—</span>
+            </div>
+          </div>
+
+          <div class="ai-block">
+            <h3>配置片段（复制到 AI 工具里）</h3>
+            <p class="hint">Cursor：设置 → MCP → 添加服务器，粘贴下面的 HTTP 配置。Claude Desktop：用 stdio 配置。</p>
+            <div class="code-block">
+              <pre id="mcpConfigText">开启 MCP 后显示配置</pre>
+              <button id="btnCopyMcp" class="btn btn-ghost btn-sm" type="button">复制</button>
+            </div>
+          </div>
+
+          <div class="ai-block muted">
+            <h3>提供的工具</h3>
+            <ul class="plain-list">
+              <li><code>search_files</code> — 搜索文件</li>
+              <li><code>get_file_summary</code> — 看某个文件讲什么</li>
+              <li><code>list_by_category</code> — 按分类列文件</li>
+              <li><code>archive_files</code> — 触发归档</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="settings-panel" data-panel="pro">
+          <div class="pro-hero">
+            <span class="pill pill-pro">Pro</span>
+            <h3>等有需要了再升级</h3>
+            <p>核心功能永久免费。Pro 是给「文件已经多到自己管不动」的人准备的。</p>
+          </div>
+
+          <ul class="pro-list">
+            <li><strong>自然语言找文件</strong><span>说「上周那份关于小红书的调研」就能找到</span></li>
+            <li><strong>后台自动监控</strong><span>指定文件夹新增 AI 文件，自动识别归档</span></li>
+            <li><strong>批量智能重命名 + 标签体系</strong><span>一次整理几百个文件</span></li>
+            <li><strong>知识库格式导出</strong><span>一键导出 Obsidian / Logseq 兼容格式</span></li>
+            <li><strong>脚本自动写使用说明</strong><span>给代码补运行方法、依赖说明</span></li>
+            <li><strong>同主题内容整合</strong><span>把零散笔记合成一份完整文档</span></li>
+            <li><strong>优先更新 + 专属支持</strong><span>新功能先用，问题优先答</span></li>
+          </ul>
+
+          <div class="price-row">
+            <div class="price-card"><span>年付</span><strong>¥19</strong><em>/ 年</em></div>
+            <div class="price-card"><span>永久</span><strong>¥39</strong><em>买断</em></div>
+          </div>
+
+          <div class="field">
+            <label>想先试用 Pro？</label>
+            <p class="hint">第一版只做本地激活，还没接支付。发邮件到 cqsj6667@agent.qq.com 说明用途，我给你开通试用。</p>
+          </div>
+        </section>
+
+        <section class="settings-panel" data-panel="about">
+          <div class="about-hero">
+            <div class="logo large">
+              <svg viewBox="0 0 40 40" width="56" height="56">
+                <rect x="3" y="6" width="34" height="28" rx="7" fill="#2563eb"/>
+                <path d="M12 15h9M12 20h16M12 25h12" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+                <circle cx="31" cy="12" r="3.2" fill="#fbbf24"/>
+              </svg>
+            </div>
+            <h3>AI工件管家</h3>
+            <p class="about-version" id="aboutVersion">v0.1.0</p>
+            <p class="about-desc">专门管理 AI 生成文件的本地工具。免费开源，不卖算力，不碰你的文件内容。</p>
+          </div>
+
+          <div class="about-grid">
+            <div><span>出品方</span><strong>智维工作室 · Zhiwei Studio</strong></div>
+            <div><span>官网</span><a href="#" id="aboutHomepage">www.zhiweistudio.com.cn</a></div>
+            <div><span>开源协议</span><strong>MIT</strong></div>
+            <div><span>联系邮箱</span><strong>cqsj6667@agent.qq.com</strong></div>
+          </div>
+
+          <div class="about-note">
+            <p>我们承接 AI 应用、桌面工具、自动化脚本的定制开发。如果你有类似需求，欢迎从官网或邮箱找到我们。</p>
+            <p class="hint">AI工件管家 不提供 AI 算力、不代付 API 费用；所有 AI 能力由你自带（本地模型或自己的密钥）。所有数据只存在你的电脑上。</p>
+          </div>
+
+          <div class="modal-actions">
+            <button id="btnOpenSite" class="btn btn-primary" type="button">访问官网</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
