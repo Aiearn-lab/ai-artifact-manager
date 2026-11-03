@@ -11,7 +11,7 @@
   <!-- 启动画面：加载时显示品牌和官网，初始化完自动淡出 -->
   <div class="splash" id="splash">
     <div class="splash-mark">AI</div>
-    <h1>AI产出管家</h1>
+    <h1 data-i18n="app.name">AI产出管家</h1>
     <p class="splash-sub">专门管理 AI 生成的文件</p>
     <p class="splash-brand">智维工作室 · Zhiwei Studio</p>
     <p class="splash-url">www.zhiweistudio.com.cn</p>
@@ -33,15 +33,15 @@
           </svg>
         </div>
         <div class="brand-text">
-          <h1>AI产出管家</h1>
-          <span class="brand-sub">智维工作室出品</span>
+          <h1 data-i18n="app.name">AI产出管家</h1>
+          <span class="brand-sub" data-i18n="app.brandSub">智维工作室出品</span>
         </div>
       </div>
 
       <div class="scan-actions">
-        <button id="btnScanScope" class="btn btn-primary btn-lg" type="button">扫描整个电脑</button>
-        <button id="btnQuickScan" class="btn btn-ghost" type="button">一键扫常用位置</button>
-        <button id="btnPickFolder" class="btn btn-ghost" type="button">只选文件夹</button>
+        <button id="btnScanScope" class="btn btn-primary btn-lg" type="button" data-i18n="nav.scanAll">扫描整个电脑</button>
+        <button id="btnQuickScan" class="btn btn-ghost" type="button" data-i18n="nav.scanCommon">一键扫常用位置</button>
+        <button id="btnPickFolder" class="btn btn-ghost" type="button" data-i18n="nav.scanFolder">只扫一个文件夹</button>
       </div>
 
       <button id="btnSettings" class="icon-btn" type="button" title="设置">
@@ -54,10 +54,10 @@
 
     <nav class="mainnav">
       <div class="nav-tabs" id="navTabs">
-        <button class="nav-tab active" data-view="files" type="button">文件清单</button>
-        <button class="nav-tab" data-view="knowledge" type="button">知识库</button>
-        <button class="nav-tab" data-view="tools" type="button">工具库</button>
-        <button class="nav-tab" data-view="duplicates" type="button">重复文件</button>
+        <button class="nav-tab active" data-view="files" type="button" data-i18n="view.files">文件清单</button>
+        <button class="nav-tab" data-view="knowledge" type="button" data-i18n="view.knowledge">知识库</button>
+        <button class="nav-tab" data-view="tools" type="button" data-i18n="view.tools">工具库</button>
+        <button class="nav-tab" data-view="duplicates" type="button" data-i18n="view.duplicates">重复文件</button>
       </div>
       <button class="nav-stats" id="btnStats" type="button" title="查看统计图表">
         <span id="navStats">还没有扫描</span>
@@ -71,18 +71,18 @@
 
         <div class="onboard hidden" id="onboardTip">
           <div class="ob-steps">
-            <span class="ob-title">第一次用，照这个顺序来就行：</span>
-            <span class="ob-step"><b>①</b> 随便点一行，右边能看内容</span>
-            <span class="ob-step"><b>②</b> 看分类对不对，不同意可以不理，管家不会自己动手</span>
-            <span class="ob-step"><b>③</b> 觉得没问题了，再点「一键整理」</span>
+            <span class="ob-title" data-i18n="onboard.title">第一次用，照这个顺序来就行：</span>
+            <span class="ob-step"><b>①</b><span data-i18n="onboard.step1">随便点一行，右边能看内容</span></span>
+            <span class="ob-step"><b>②</b><span data-i18n="onboard.step2">看分类对不对，不同意可以不理，管家不会自己动手</span></span>
+            <span class="ob-step"><b>③</b><span data-i18n="onboard.step3">觉得没问题了，再点「一键整理」</span></span>
           </div>
-          <button class="btn btn-primary btn-sm" id="btnOnboardOk" type="button">明白了</button>
+          <button class="btn btn-primary btn-sm" id="btnOnboardOk" type="button" data-i18n="onboard.ok">明白了</button>
         </div>
 
         <div class="watch-bar hidden" id="watchBar">
           <span class="wb-dot"></span>
           <span class="wb-text" id="watchBarText">自动监控已开启</span>
-          <button class="btn btn-ghost btn-sm" id="btnWatchShow" type="button">看看新文件</button>
+          <button class="btn btn-ghost btn-sm" id="btnWatchShow" type="button" data-i18n="watch.show">看看新文件</button>
         </div>
 
         <div class="list-toolbar">
@@ -90,34 +90,34 @@
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
             </svg>
-            <input id="searchInput" type="text" placeholder="搜文件名、路径，也能搜文件里的内容">
+            <input id="searchInput" type="text" placeholder="搜文件名、路径，也能搜文件里的内容" data-i18n-ph="tb.search">
           </div>
           <select id="sourceFilter">
-            <option value="all">全部来源</option>
+            <option value="all" data-i18n="tb.allSources">全部来源</option>
           </select>
           <select id="sortSelect">
-            <option value="mtime">按修改时间</option>
-            <option value="size">按文件大小</option>
-            <option value="name">按文件名</option>
-            <option value="chars">按内容长度</option>
+            <option value="mtime" data-i18n="tb.sortMtime">按修改时间</option>
+            <option value="size" data-i18n="tb.sortSize">按文件大小</option>
+            <option value="name" data-i18n="tb.sortName">按文件名</option>
+            <option value="chars" data-i18n="tb.sortChars">按内容长度</option>
           </select>
           <div class="bulk-actions">
-            <label class="check-inline"><input type="checkbox" id="selectAll"> 全选</label>
-            <button id="btnOneClick" class="btn btn-primary btn-sm" type="button">一键整理</button>
-            <button id="btnArchive" class="btn btn-ghost btn-sm" type="button">归档</button>
-            <button id="btnExport" class="btn btn-ghost btn-sm" type="button">导出</button>
-            <button id="btnCleanDup" class="btn btn-ghost btn-sm btn-danger-ghost" type="button">清理重复</button>
-            <button id="btnOpenTrash" class="btn btn-ghost btn-sm" type="button">清理记录</button>
+            <label class="check-inline"><input type="checkbox" id="selectAll"> <span data-i18n="tb.selectAll">全选</span></label>
+            <button id="btnOneClick" class="btn btn-primary btn-sm" type="button" data-i18n="tb.tidy">一键整理</button>
+            <button id="btnArchive" class="btn btn-ghost btn-sm" type="button" data-i18n="tb.archive">归档</button>
+            <button id="btnExport" class="btn btn-ghost btn-sm" type="button" data-i18n="tb.export">导出</button>
+            <button id="btnCleanDup" class="btn btn-ghost btn-sm btn-danger-ghost" type="button" data-i18n="tb.cleanDup">清理重复</button>
+            <button id="btnOpenTrash" class="btn btn-ghost btn-sm" type="button" data-i18n="view.trashLog">清理记录</button>
           </div>
         </div>
 
         <div class="cat-tabs" id="categoryTabs">
-          <button class="tab active" data-cat="all" type="button">全部 <em id="tabCountAll">0</em></button>
-          <button class="tab" data-cat="knowledge" type="button">值得留的知识 <em id="tabCountKnowledge">0</em></button>
-          <button class="tab" data-cat="tool" type="button">能用的工具 <em id="tabCountTool">0</em></button>
-          <button class="tab" data-cat="junk" type="button">可以删的 <em id="tabCountJunk">0</em></button>
-          <button class="tab" data-cat="dup" type="button">重复的 <em id="tabCountDup">0</em></button>
-          <button class="tab" data-cat="other" type="button">其他 <em id="tabCountOther">0</em></button>
+          <button class="tab active" data-cat="all" type="button"><span data-i18n="tab.all">全部</span> <em id="tabCountAll">0</em></button>
+          <button class="tab" data-cat="knowledge" type="button"><span data-i18n="tab.keep">值得留的知识</span> <em id="tabCountKnowledge">0</em></button>
+          <button class="tab" data-cat="tool" type="button"><span data-i18n="tab.tools">能用的工具</span> <em id="tabCountTool">0</em></button>
+          <button class="tab" data-cat="junk" type="button"><span data-i18n="tab.clean">可以删的</span> <em id="tabCountJunk">0</em></button>
+          <button class="tab" data-cat="dup" type="button"><span data-i18n="tab.dup">重复的</span> <em id="tabCountDup">0</em></button>
+          <button class="tab" data-cat="other" type="button"><span data-i18n="tab.other">其他</span> <em id="tabCountOther">0</em></button>
         </div>
 
         <div class="table-head" id="tableHead"></div>
@@ -134,7 +134,7 @@
             <p>只读不改：扫描只是看看有哪些 AI 产出的文件，不会动你的东西。</p>
             <div class="empty-actions">
               <button id="btnEmptyScan" class="btn btn-primary btn-lg" type="button">帮我扫一扫</button>
-              <button id="btnEmptyFolder" class="btn btn-ghost btn-lg" type="button">只扫一个文件夹</button>
+              <button id="btnEmptyFolder" class="btn btn-ghost btn-lg" type="button" data-i18n="nav.scanFolder">只扫一个文件夹</button>
             </div>
             <p class="empty-tip">「帮我扫一扫」只扫桌面、下载、文档三个地方，最快最安全。</p>
           </div>
@@ -149,7 +149,7 @@
               <path d="M16 16h16M16 22h16M16 28h10"/>
             </svg>
           </div>
-          <p>点左边任意一个文件<br>这里能直接看内容，还能让 AI 帮你摘要、改名</p>
+          <p data-i18n="list.noPreview">点左边任意一个文件<br>这里能直接看内容，还能让 AI 帮你摘要、改名</p>
         </div>
 
         <div class="preview-content hidden" id="previewContent">
@@ -189,7 +189,7 @@
       <span class="status-right">
         <a href="#" id="linkHomepage">智维工作室 · zhiweistudio.com.cn</a>
         <span class="dot">·</span>
-        <span id="statusVersion">v0.5.0</span>
+        <span id="statusVersion">v0.5.1</span>
       </span>
     </footer>
 
@@ -262,76 +262,87 @@
   <div class="modal-mask hidden" id="settingsModal">
     <div class="modal">
       <header class="modal-head">
-        <h2>设置</h2>
+        <h2 data-i18n="set.title">设置</h2>
         <button class="icon-btn" id="btnCloseSettings" type="button" title="关闭">×</button>
       </header>
 
       <nav class="settings-tabs" id="settingsTabs">
-        <button class="active" data-tab="general" type="button">常规</button>
-        <button data-tab="ai" type="button">AI 接入</button>
-        <button data-tab="mcp" type="button">MCP 服务</button>
-        <button data-tab="about" type="button">关于</button>
+        <button class="active" data-tab="general" type="button" data-i18n="set.tabGeneral">常规</button>
+        <button data-tab="ai" type="button" data-i18n="set.tabAi">AI 接入</button>
+        <button data-tab="mcp" type="button">MCP</button>
+        <button data-tab="about" type="button" data-i18n="set.tabAbout">关于</button>
       </nav>
 
       <div class="settings-body">
         <section class="settings-panel active" data-panel="general">
           <div class="field">
-            <label>整理后的文件放哪里</label>
+            <label>界面语言 / Language</label>
             <div class="field-row">
-              <input id="setArchiveRoot" type="text" placeholder="例如 D:\AI产出归档">
-              <button id="btnPickArchiveRoot" class="btn btn-ghost btn-sm" type="button">选择</button>
+              <select id="setLang">
+                <option value="">跟随系统 / Auto</option>
+                <option value="zh">简体中文</option>
+                <option value="en">English</option>
+              </select>
             </div>
-            <p class="hint">「一键整理」会把该留的知识和工具挪到这里，按分类建文件夹。默认是剪切，整理完原位置不再保留。删掉的东西会进 Windows 回收站，随时能在系统回收站里还原。</p>
           </div>
 
           <div class="field">
-            <label>整理方式</label>
+            <label data-i18n="set.archiveRoot">整理后的文件放哪里</label>
+            <div class="field-row">
+              <input id="setArchiveRoot" type="text" placeholder="例如 D:\AI产出归档" data-i18n-ph="set.archiveRootPh">
+              <button id="btnPickArchiveRoot" class="btn btn-ghost btn-sm" type="button" data-i18n="set.pick">选择</button>
+            </div>
+            <p class="hint" data-i18n="set.archiveHint">「一键整理」会把该留的知识和工具挪到这里，按分类建文件夹。默认是剪切，整理完原位置不再保留。删掉的东西会进 Windows 回收站，随时能在系统回收站里还原。</p>
+          </div>
+
+          <div class="field">
+            <label data-i18n="set.mode">整理方式</label>
             <select id="setArchiveMode">
-              <option value="move">剪切（推荐，整理完原位置不留）</option>
-              <option value="copy">复制（原文件留着，适合做备份）</option>
+              <option value="move" data-i18n="set.modeMove">剪切（推荐，整理完原位置不留）</option>
+              <option value="copy" data-i18n="set.modeCopy">复制（原文件留着，适合做备份）</option>
             </select>
           </div>
 
           <div class="field">
-            <label>默认跳过的地方（不会扫）</label>
+            <label data-i18n="set.skipTitle">默认跳过的地方（不会扫）</label>
             <details class="builtin-box">
-              <summary>查看已预置的系统目录和文件类型</summary>
+              <summary data-i18n="set.skipSummary">查看已预置的系统目录和文件类型</summary>
               <div class="builtin-list" id="builtinList"></div>
             </details>
-            <p class="hint">这些是系统目录、程序目录和不可能是 AI 产出的文件类型，默认就不扫，避免扫到一半卡住或误伤。</p>
+            <p class="hint" data-i18n="set.skipHint">这些是系统目录、程序目录和不可能是 AI 产出的文件类型，默认就不扫，避免扫到一半卡住或误伤。</p>
           </div>
 
           <div class="field">
-            <label>额外不想扫的地方（每行一条，可以是路径或 .扩展名）</label>
-            <textarea id="setWhitelist" rows="3" placeholder="例如 D:\我的老照片 或 .psd"></textarea>
+            <label data-i18n="set.extraSkip">额外不想扫的地方（每行一条，可以是路径或 .扩展名）</label>
+            <textarea id="setWhitelist" rows="3" placeholder="例如 D:\我的老照片 或 .psd" data-i18n-ph="set.extraSkipPh"></textarea>
           </div>
 
           <details class="advanced">
-            <summary>高级扫描参数（一般不用改）</summary>
+            <summary data-i18n="set.advanced">高级扫描参数（一般不用改）</summary>
             <div class="field-row two">
               <div class="field">
-                <label>最大扫描深度</label>
+                <label data-i18n="set.maxDepth">最大扫描深度</label>
                 <input id="setMaxDepth" type="number" min="1" max="30" value="14">
               </div>
               <div class="field">
-                <label>最大文件数</label>
+                <label data-i18n="set.maxFiles">最大文件数</label>
                 <input id="setMaxFiles" type="number" min="100" max="200000" step="1000" value="50000">
               </div>
             </div>
           </details>
 
           <div class="field">
-            <label>Windows 右键菜单</label>
+            <label data-i18n="set.ctxTitle">Windows 右键菜单</label>
             <div class="field-row">
-              <button id="btnCtxInstall" class="btn btn-ghost btn-sm" type="button">安装右键扫描</button>
-              <button id="btnCtxUninstall" class="btn btn-ghost btn-sm" type="button">卸载</button>
-              <span class="inline-status" id="ctxStatus">检测中…</span>
+              <button id="btnCtxInstall" class="btn btn-ghost btn-sm" type="button" data-i18n="set.ctxInstall">安装右键扫描</button>
+              <button id="btnCtxUninstall" class="btn btn-ghost btn-sm" type="button" data-i18n="set.ctxUninstall">卸载</button>
+              <span class="inline-status" id="ctxStatus" data-i18n="set.ctxChecking">检测中…</span>
             </div>
-            <p class="hint">装好后，在资源管理器里右键任意文件夹，可以直接用 AI产出管家 扫描。</p>
+            <p class="hint" data-i18n="set.ctxHint">装好后，在资源管理器里右键任意文件夹，可以直接用 AI产出管家 扫描。</p>
           </div>
 
           <div class="field">
-            <label>自动监控</label>
+            <label data-i18n="set.watchTitle">自动监控</label>
             <p class="hint">
               盯住几个文件夹，出现新的 AI 文件就自动分好类提醒你。<b>只提示，不会自己搬动或删你的文件。</b>
             </p>
@@ -443,7 +454,7 @@
               </svg>
             </div>
             <h3>AI产出管家</h3>
-            <p class="about-version" id="aboutVersion">v0.5.0</p>
+            <p class="about-version" id="aboutVersion">v0.5.1</p>
             <p class="about-desc">专门管理 AI 产出文件的本地工具。免费开源，不卖算力，不碰你的文件内容。</p>
           </div>
 
@@ -468,7 +479,7 @@
       <div class="settings-brandbar">
         <span class="sb-brand">智维工作室 · Zhiwei Studio</span>
         <a href="#" id="settingsHomepage">www.zhiweistudio.com.cn</a>
-        <span class="sb-note">承接 AI 应用 / 桌面工具 / 自动化脚本定制</span>
+        <span class="sb-note" data-i18n="brand.services">承接 AI 应用 / 桌面工具 / 自动化脚本定制</span>
       </div>
     </div>
   </div>
@@ -494,6 +505,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="locales.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
