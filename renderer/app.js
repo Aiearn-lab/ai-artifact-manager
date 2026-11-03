@@ -47,7 +47,9 @@ const state = {
   contentHits: new Map(),
   contentSearching: false,
   contentScanned: 0,
-  contentPartial: false
+  contentPartial: false,
+  // 自动监控状态
+  watch: { enabled: false, dirs: [], recent: [] }
 };
 
 /* ---------------- 基础工具 ---------------- */
@@ -160,6 +162,15 @@ async function init() {
     scanRoots([dir], '指定文件夹');
   });
 
+  // 监控状态与「发现新文件」推送
+  await loadWatchStatus();
+  window.api.onWatchFound(async (entry) => {
+    await loadWatchStatus();
+    if (entry && entry.count) {
+      toast(`发现 ${entry.count} 个新文件，已经分好类了`);
+    }
+  });
+
   // 初始化完成，启动画面淡出（.out 有 320ms 过渡，之后再移除节点）
   const splash = $('#splash');
   if (splash) {
@@ -218,6 +229,27 @@ function bindEvents() {
     renderList(); // 先按文件名/标签出结果，正文结果稍后补进来
     scheduleContentSearch(state.filter.q);
   });
+  $('#btnWatchAdd').addEventListener('click', addWatchDir);
+  $('#btnWatchToggle').addEventListener('click', toggleWatch);
+  $('#watchDirs').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-i]');
+    if (!btn) return;
+    state.watch.dirs.splice(Number(btn.dataset.i), 1);
+    refreshWatchUI();
+    if (state.watch.enabled && state.watch.dirs.length) {
+      await window.api.watchStart(state.watch.dirs);
+    } else if (state.watch.enabled && !state.watch.dirs.length) {
+      await window.api.watchStop();
+    }
+    await loadWatchStatus();
+  });
+  $('#btnWatchShow').addEventListener('click', () => {
+    const last = (state.watch.recent || [])[0];
+    if (!last) return;
+    // 新文件就在刚才盯的目录里，点一下直接扫它
+    scanRoots([last.dir], '自动监控发现的');
+  });
+
   $('#btnOnboardOk').addEventListener('click', async () => {
     $('#onboardTip').classList.add('hidden');
     try {
@@ -226,7 +258,6 @@ function bindEvents() {
       /* 存不下就下次再说，不影响用 */
     }
   });
-  $('#btnProActivate').addEventListener('click', doProActivate);
   $('#settingsHomepage').addEventListener('click', (e) => {
     e.preventDefault();
     window.api.openUrl('https://www.zhiweistudio.com.cn');
@@ -948,6 +979,88 @@ function renderPreviewEmpty() {
   $('#previewContent').classList.add('hidden');
 }
 
+/* ---------------- 自动监控 ---------------- */
+function renderWatchDirs() {
+  const box = $('#watchDirs');
+  if (!box) return;
+  const dirs = (state.watch && state.watch.dirs) || [];
+  box.innerHTML = dirs
+    .map(
+      (d, i) =>
+        `<div class="watch-dir"><span title="${esc(d)}">${esc(d)}</span><button type="button" data-i="${i}" title="不再盯这个">×</button></div>`
+    )
+    .join('');
+}
+
+function refreshWatchUI() {
+  const w = state.watch || { enabled: false, dirs: [] };
+  const txt = $('#watchStatusText');
+  const btn = $('#btnWatchToggle');
+  if (txt) {
+    txt.textContent = w.enabled ? `正在盯 ${w.dirs.length} 个文件夹` : '未开启';
+    txt.style.color = w.enabled ? '#059669' : '';
+  }
+  if (btn) btn.textContent = w.enabled ? '停止监控' : '开启监控';
+  renderWatchDirs();
+
+  const bar = $('#watchBar');
+  if (bar) {
+    if (w.enabled) {
+      const total = (w.recent || []).reduce((n, r) => n + (r.count || 0), 0);
+      $('#watchBarText').textContent = total
+        ? `自动监控中 · 已经发现 ${total} 个新文件，都分好类了`
+        : `自动监控中 · 盯着 ${w.dirs.length} 个文件夹，有新文件会提醒你`;
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+  const show = $('#btnWatchShow');
+  if (show && w.recent && w.recent.length) show.classList.remove('hidden');
+  else if (show) show.classList.add('hidden');
+}
+
+async function loadWatchStatus() {
+  try {
+    const r = await window.api.watchStatus();
+    state.watch = { enabled: !!r.enabled, dirs: r.dirs || [], recent: r.recent || [] };
+  } catch {
+    state.watch = { enabled: false, dirs: [], recent: [] };
+  }
+  refreshWatchUI();
+}
+
+async function toggleWatch() {
+  const w = state.watch || {};
+  try {
+    if (w.enabled) {
+      await window.api.watchStop();
+      toast('已停止监控');
+    } else {
+      if (!w.dirs || !w.dirs.length) return toast('先点「选一个文件夹」', true);
+      const r = await window.api.watchStart(w.dirs);
+      if (!r || !r.ok) return toast((r && r.error) || '开启失败', true);
+      toast(`已开始盯 ${r.dirs.length} 个文件夹`);
+    }
+    await loadWatchStatus();
+  } catch (err) {
+    toast(`操作失败：${err.message}`, true);
+  }
+}
+
+async function addWatchDir() {
+  const r = await window.api.watchPickDir();
+  if (!r || !r.ok) return;
+  if (state.watch.dirs.includes(r.dir)) return toast('这个文件夹已经在盯了');
+  state.watch.dirs.push(r.dir);
+  refreshWatchUI();
+  if (state.watch.enabled) {
+    const s2 = await window.api.watchStart(state.watch.dirs);
+    if (!s2 || !s2.ok) return toast((s2 && s2.error) || '更新监控失败', true);
+  }
+  await loadWatchStatus();
+}
+
 async function selectFile(id) {
   state.currentId = id;
   $$('#fileList .file-row').forEach((r) => r.classList.toggle('selected', r.dataset.id === id));
@@ -1516,43 +1629,9 @@ async function testAi() {
 }
 
 /* ---------------- 设置 ---------------- */
-/** 刷新 Pro 激活状态那一行文字和按钮 */
-function refreshProStatus() {
-  const el = $('#proStatus');
-  const btn = $('#btnProActivate');
-  if (!el) return;
-  const pro = (state.config && state.config.pro) || {};
-  if (pro.activated) {
-    el.textContent = `已激活${pro.code ? `（${pro.code}）` : ''}。Pro 功能会随版本更新逐步开放。`;
-    el.style.color = '#059669';
-    if (btn) btn.textContent = '换一个码';
-  } else {
-    el.textContent = '还没激活。核心功能不受影响，Pro 只是多几个省事的功能。';
-    el.style.color = '';
-    if (btn) btn.textContent = '激活';
-  }
-}
-
-async function doProActivate() {
-  const input = $('#proCode');
-  const code = ((input && input.value) || '').trim();
-  if (!code) return toast('先把激活码填进去', true);
-  try {
-    const r = await window.api.proActivate(code);
-    if (!r || !r.ok) return toast((r && r.error) || '激活失败', true);
-    state.config = await window.api.configGet();
-    if (input) input.value = '';
-    refreshProStatus();
-    toast('激活成功，谢谢支持');
-  } catch (err) {
-    toast(`激活失败：${err.message}`, true);
-  }
-}
-
 async function openSettings() {
   const c = state.config || (await window.api.configGet());
   state.config = c;
-  refreshProStatus();
 
   $('#setArchiveRoot').value = c.archiveRoot || '';
   $('#setArchiveMode').value = c.archiveMode || 'move';
