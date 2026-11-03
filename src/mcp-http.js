@@ -15,7 +15,8 @@ function createMcpHttpServer(options) {
   let port = 0;
 
   async function onRequest(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // 不设 CORS 通配：MCP 客户端是本地进程，不需要浏览器跨域；
+    // 关掉后恶意网页无法直接探测/调用本机服务
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, X-Mcp-Token');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
