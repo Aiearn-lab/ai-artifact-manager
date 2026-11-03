@@ -223,6 +223,53 @@ function assertKnownFile(filePath) {
   return f;
 }
 
+/**
+ * 全文搜索：按需读文件开头一段，带内存缓存。
+ * 「只记得内容不记得文件名」是这个工具最该解决的问题，
+ * 所以搜索必须能钻进正文，不能只比文件名。
+ */
+const textSearchCache = new Map();
+const SEARCH_READ_BYTES = 65536; // 只读开头 64KB，正文搜索够用且不拖慢
+const SEARCH_CONCURRENCY = 8; // 同时读 8 个，兼顾速度和磁盘
+const SEARCH_TIME_BUDGET = 12000; // 12 秒还没搜完就先返回已有结果
+
+async function readSearchText(f) {
+  const cached = textSearchCache.get(f.path);
+  if (cached && cached.mtime === f.mtime) return cached.text;
+  try {
+    const fh = await fsp.open(f.path, 'r');
+    try {
+      const len = Math.min(f.size || SEARCH_READ_BYTES, SEARCH_READ_BYTES);
+      const buf = Buffer.alloc(len);
+      const { bytesRead } = await fh.read(buf, 0, len, 0);
+      let text = buf.subarray(0, bytesRead).toString('utf8');
+      if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+      if (textSearchCache.size > 4000) textSearchCache.clear(); // 别无限涨
+      textSearchCache.set(f.path, { mtime: f.mtime, text });
+      return text;
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return '';
+  }
+}
+
+/** 截一段包含关键词的上下文，给列表里显示（前面少留点，关键词得能看见） */
+function makeSnippet(text, needle) {
+  const i = text.toLowerCase().indexOf(needle);
+  if (i < 0) return '';
+  const start = Math.max(0, i - 12);
+  const end = Math.min(text.length, i + needle.length + 48);
+  const piece = text
+    .slice(start, end)
+    .replace(/\s+/g, ' ')
+    .replace(/\*\*|__/g, '') // 去 markdown 加粗，片段读起来干净些
+    .replace(/^[#>\-\s]+/, '')
+    .trim();
+  return `${start > 0 ? '…' : ''}${piece}${end < text.length ? '…' : ''}`;
+}
+
 async function writeIndex() {
   if (!lastScan) return;
   const indexPath = path.join(app.getPath('userData'), 'mcp-index.json');
@@ -516,6 +563,47 @@ function registerIpc() {
   ipcMain.handle('scan:cancel', () => {
     scanAbort = true;
     return true;
+  });
+
+  // 全文搜索：只搜文本类文件，最多跑 12 秒，没搜完也先返回已找到的
+  ipcMain.handle('search:content', async (e, payload) => {
+    const q = String((payload && payload.q) || '').trim();
+    if (q.length < 2) return { ok: true, hits: [], scanned: 0, elapsed: 0, partial: false };
+    if (!lastScan) return { ok: false, error: '还没有扫描结果' };
+
+    const needle = q.toLowerCase();
+    const files = lastScan.files.filter((f) => scanner.TEXT_EXT.has(f.ext));
+    const hits = [];
+    let cursor = 0;
+    let partial = false;
+    const started = Date.now();
+
+    async function worker() {
+      while (cursor < files.length) {
+        if (Date.now() - started > SEARCH_TIME_BUDGET) {
+          partial = true;
+          return;
+        }
+        const f = files[cursor];
+        cursor += 1;
+        const text = await readSearchText(f);
+        if (!text) continue;
+        const lower = text.toLowerCase();
+        if (!lower.includes(needle)) continue;
+        let count = 0;
+        let idx = 0;
+        for (;;) {
+          idx = lower.indexOf(needle, idx);
+          if (idx === -1) break;
+          count += 1;
+          idx += needle.length;
+        }
+        hits.push({ path: f.path, count, snippet: makeSnippet(text, needle) });
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(SEARCH_CONCURRENCY, files.length) }, worker));
+    return { ok: true, hits, scanned: files.length, elapsed: Date.now() - started, partial };
   });
 
   ipcMain.handle('file:preview', async (e, filePath) => {
@@ -856,6 +944,14 @@ function createWindow() {
           } else if (action === 'trash') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnOpenTrash').click(); true");
             await new Promise((r) => setTimeout(r, 800));
+          } else if (action === 'search') {
+            const kw = String(process.env.AI_AM_SHOT_Q || '');
+            await mainWindow.webContents.executeJavaScript(
+              `(() => { const i = document.querySelector('#searchInput'); if (i) { i.value = ${JSON.stringify(
+                kw
+              )}; i.dispatchEvent(new Event('input')); } return true; })()`
+            );
+            await new Promise((r) => setTimeout(r, 2600));
           }
           const apiOk = await mainWindow.webContents.executeJavaScript(
             '!!window.api && typeof window.api.scan === "function" && typeof window.api.trashList === "function"'
