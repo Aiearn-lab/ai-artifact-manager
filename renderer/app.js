@@ -1282,29 +1282,20 @@ async function ensureArchiveRoot() {
   return root;
 }
 
-function archiveMode() {
-  return (state.config && state.config.archiveMode) === 'copy' ? 'copy' : 'move';
-}
-
 async function doArchive() {
   const paths = selectedPaths();
   if (!paths.length) return toast(t('msg.pickFiles'), true);
   const root = await ensureArchiveRoot();
   if (!root) return toast(t('msg.noArchiveRoot'), true);
-  const mode = archiveMode();
   const tip =
-    mode === 'copy'
-      ? LANG === 'zh'
-        ? `把 ${paths.length} 个文件【复制】到：\n${root}\n\n原文件会留着。确定吗？`
-        : `Copy ${paths.length} files to:\n${root}\n\nOriginals stay where they are. Continue?`
-      : LANG === 'zh'
+    LANG === 'zh'
       ? `把 ${paths.length} 个文件【移动】到：\n${root}\n\n原位置不再保留，会按分类建文件夹。确定吗？`
       : `Move ${paths.length} files to:\n${root}\n\nOriginals will not stay; subfolders are created by category. Continue?`;
   if (!window.confirm(tip)) return;
 
   try {
-    const r = await window.api.archive({ paths, targetDir: root, mode });
-    removeFromState(mode === 'move' ? r.done || [] : []);
+    const r = await window.api.archive({ paths, targetDir: root });
+    removeFromState(r.done || []);
     toast(t('msg.archiveDone', { ok: r.ok, fail: r.failed.length }));
   } catch (err) {
     toast(t('msg.archiveFail', { msg: err.message }), true);
@@ -1317,7 +1308,7 @@ async function archiveCurrent() {
   const root = await ensureArchiveRoot();
   if (!root) return toast(t('msg.noArchiveRoot'), true);
   try {
-    const r = await window.api.archive({ paths: [f.path], targetDir: root, mode: archiveMode() });
+    const r = await window.api.archive({ paths: [f.path], targetDir: root });
     if (r.ok) {
       removeFromState(r.done || []);
       toast(t('msg.alreadyArchived'));
@@ -1394,11 +1385,10 @@ async function doOneClickOrganize() {
     if (keepList.length) {
       const r = await window.api.archive({
         paths: keepList.map((f) => f.path),
-        targetDir: root,
-        mode: archiveMode()
+        targetDir: root
       });
       archived = r.ok;
-      removeFromState(archiveMode() === 'move' ? r.done || [] : [], false);
+      removeFromState(r.done || [], false);
     }
     if (trashList.length) {
       const r = await window.api.cleanupTrash({ paths: trashList.map((f) => f.path) });
@@ -1829,7 +1819,6 @@ async function openSettings() {
   const langSel = $('#setLang');
   if (langSel) langSel.value = (c.ui && c.ui.lang) || '';
   $('#setArchiveRoot').value = c.archiveRoot || '';
-  $('#setArchiveMode').value = c.archiveMode || 'move';
   $('#setMaxDepth').value = c.maxDepth || 14;
   $('#setMaxFiles').value = c.maxFiles || 50000;
 
@@ -1868,7 +1857,6 @@ async function saveGeneral() {
 
   const patch = {
     archiveRoot: $('#setArchiveRoot').value.trim(),
-    archiveMode: $('#setArchiveMode').value === 'copy' ? 'copy' : 'move',
     maxDepth: Number($('#setMaxDepth').value) || 14,
     maxFiles: Number($('#setMaxFiles').value) || 50000,
     whitelist: [...builtin, ...custom]
