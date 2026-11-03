@@ -254,6 +254,31 @@ function bindEvents() {
   $('#btnExport').addEventListener('click', doExport);
   $('#btnCleanDup').addEventListener('click', doCleanDuplicates);
   $('#btnOpenTrash').addEventListener('click', openTrash);
+  $('#btnCloseTrash').addEventListener('click', () => $('#trashModal').classList.add('hidden'));
+  $('#trashModal').addEventListener('click', (e) => {
+    if (e.target === $('#trashModal')) $('#trashModal').classList.add('hidden');
+  });
+  $('#btnOpenTrashFolder').addEventListener('click', async () => {
+    try {
+      const dir = await window.api.openTrash();
+      toast(`已打开回收站文件夹：${dir}`);
+    } catch (err) {
+      toast(`打开失败：${err.message}`, true);
+    }
+  });
+  $('#trashList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-restore]');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const r = await window.api.trashRestore({ batch: btn.dataset.batch, trashedPath: btn.dataset.trashed });
+      toast(`已放回原位置：${r.path}`);
+      await renderTrash();
+    } catch (err) {
+      toast(`放回失败：${err.message}`, true);
+      btn.disabled = false;
+    }
+  });
 
   $('#btnPreviewOpen').addEventListener('click', () => {
     const f = currentFile();
@@ -890,25 +915,42 @@ async function doOneClickOrganize() {
   const keep = state.files.filter(
     (f) => f.category && (f.category.group === 'knowledge' || f.category.group === 'tool')
   );
+
+  // 只自动处理「完全相同」和规则判定的垃圾；「相似但不完全相同」一律不动，交给用户自己看
+  const exactDups = state.files.filter(
+    (f) => f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'exact'
+  );
+  const similarDups = state.files.filter(
+    (f) => f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'similar'
+  );
+  const junk = state.files.filter(
+    (f) => f.category && f.category.key === 'junk' && !(f.duplicate && f.duplicate.isDuplicate)
+  );
+
   const trashMap = new Map();
-  for (const f of state.files) {
-    if ((f.category && f.category.key === 'junk') || (f.duplicate && f.duplicate.isDuplicate)) {
-      trashMap.set(f.path, f);
-    }
-  }
+  for (const f of [...exactDups, ...junk]) trashMap.set(f.path, f);
   const keepList = keep.filter((f) => !trashMap.has(f.path));
   const trashList = Array.from(trashMap.values());
 
-  if (!keepList.length && !trashList.length) return toast('没有需要整理的文件，挺干净的');
+  if (!keepList.length && !trashList.length) {
+    return toast(similarDups.length ? '没有可自动整理的；有相似文件需要你手动确认' : '没有需要整理的文件，挺干净的');
+  }
 
   const root = await ensureArchiveRoot();
   if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
 
+  const sample = trashList.slice(0, 5).map((f) => `· ${f.name}`).join('\n');
+  const more = trashList.length > 5 ? `\n…还有 ${trashList.length - 5} 个` : '';
+  const similarNote = similarDups.length
+    ? `\n\n③ 另外有 ${similarDups.length} 个「相似但不完全相同」的文件，管家不会自动动它们，\n   你可以到「重复文件」页逐个看。`
+    : '';
+
   const ok = window.confirm(
     `管家准备这样做：\n\n` +
       `① 把 ${keepList.length} 个「值得留的知识 / 能用的工具」移动到：\n${root}\n\n` +
-      `② 把 ${trashList.length} 个「可以删的 / 重复的」移到回收站（还能找回）\n\n` +
-      `确定就点「确定」，不确定就点「取消」。`
+      `② 把 ${trashList.length} 个「完全相同 / 可以删的」移到回收站（之后能一键放回）：\n${sample}${more}` +
+      similarNote +
+      `\n\n确定就点「确定」，不确定就点「取消」。`
   );
   if (!ok) return;
 
@@ -931,7 +973,7 @@ async function doOneClickOrganize() {
       if (r.done) removeFromState(r.done, false);
     }
     renderAll();
-    toast(`整理完成：${archived} 个归档，${trashed} 个移到回收站。回收站里还能找回。`);
+    toast(`整理完成：${archived} 个归档，${trashed} 个移到回收站。想找回点「回收站」。`);
   } catch (err) {
     toast(`整理失败：${err.message}`, true);
   } finally {
@@ -980,30 +1022,75 @@ async function doExport() {
 }
 
 async function doCleanDuplicates() {
-  const dups = state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate);
-  if (!dups.length) return toast('没有发现重复或高度相似的文件');
-  const size = dups.reduce((s, f) => s + f.size, 0);
+  const exact = state.files.filter(
+    (f) => f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'exact'
+  );
+  const similar = state.files.filter(
+    (f) => f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'similar'
+  );
+
+  if (!exact.length) {
+    if (similar.length) {
+      return toast(`没有完全相同的文件；有 ${similar.length} 个相似文件，请到「重复文件」页逐个确认`);
+    }
+    return toast('没有发现重复文件');
+  }
+
+  const size = exact.reduce((s, f) => s + f.size, 0);
+  const similarNote = similar.length
+    ? `\n\n另有 ${similar.length} 个「相似但不完全相同」的文件，管家不会自动删，你可以到「重复文件」页逐个看。`
+    : '';
   const ok = window.confirm(
-    `发现 ${dups.length} 个重复/相似文件，可释放约 ${fmtSize(size)}。\n\n` +
-      `会把每组里多余的移到回收站，每组保留最完整的一份。\n\n确定吗？`
+    `发现 ${exact.length} 个内容完全相同的文件，可释放约 ${fmtSize(size)}。\n\n` +
+      `会把多余的移到回收站（能一键放回），每组保留一份。${similarNote}\n\n确定吗？`
   );
   if (!ok) return;
 
   try {
-    const r = await window.api.removeDuplicates({ paths: dups.map((f) => f.path), toTrash: true });
-    removeFromState(r.done || dups.map((f) => ({ path: f.path })));
-    toast(`已移入回收站 ${r.ok} 个，释放约 ${fmtSize(size)}`);
+    const r = await window.api.removeDuplicates({ paths: exact.map((f) => f.path), toTrash: true });
+    removeFromState(r.done || exact.map((f) => ({ path: f.path })));
+    toast(`已移入回收站 ${r.ok} 个，释放约 ${fmtSize(size)}。点「回收站」可以放回。`);
   } catch (err) {
     toast(`清理失败：${err.message}`, true);
   }
 }
 
 async function openTrash() {
+  $('#trashModal').classList.remove('hidden');
+  await renderTrash();
+}
+
+async function renderTrash() {
+  const box = $('#trashList');
+  box.innerHTML = '<div class="trash-empty">正在读取…</div>';
   try {
-    const dir = await window.api.openTrash();
-    toast(`已打开回收站：${dir}`);
+    const batches = await window.api.trashList();
+    if (!batches.length) {
+      box.innerHTML = '<div class="trash-empty">回收站是空的</div>';
+      return;
+    }
+    box.innerHTML = batches
+      .map(
+        (b) => `<div class="trash-batch">
+          <div class="trash-batch-head"><span>${fmtTime(b.createdAt)} 移入</span><span>${b.files.length} 个文件</span></div>
+          ${b.files
+            .map(
+              (f) => `<div class="trash-item">
+                <div class="ti-main">
+                  <div class="ti-name" title="${esc(f.name)}">${esc(f.name)}</div>
+                  <div class="ti-path" title="${esc(f.originalPath)}">原位置：${esc(f.originalPath)}</div>
+                </div>
+                <button class="btn btn-ghost btn-sm" data-restore="1" data-batch="${esc(b.id)}" data-trashed="${esc(
+                f.trashedPath
+              )}">放回去</button>
+              </div>`
+            )
+            .join('')}
+        </div>`
+      )
+      .join('');
   } catch (err) {
-    toast(`打开回收站失败：${err.message}`, true);
+    box.innerHTML = `<div class="trash-empty">读取失败：${esc(err.message)}</div>`;
   }
 }
 
@@ -1063,10 +1150,25 @@ function ensureAi() {
   return false;
 }
 
+/** 第一次用 AI 前说明：内容会发给所配置的 AI 服务，本地模型则不出本机 */
+function aiPrivacyConfirmed() {
+  try {
+    if (localStorage.getItem('aiPrivacyConfirmed') === '1') return true;
+    const ok = window.confirm(
+      '提醒一下：\n\nAI 摘要 / 起名 / 打标签会把文件开头的内容，发给你在设置里配置的 AI 服务。\n\n如果连的是本机 Ollama 或 LM Studio，内容不出这台电脑；\n如果填的是远程 API，内容会发送到那家服务商。\n\n继续吗？'
+    );
+    if (ok) localStorage.setItem('aiPrivacyConfirmed', '1');
+    return ok;
+  } catch {
+    return true;
+  }
+}
+
 async function runAi(kind) {
   const f = currentFile();
   if (!f) return toast('先选一个文件', true);
   if (!ensureAi()) return;
+  if (!aiPrivacyConfirmed()) return;
 
   const box = $('#aiResult');
   const labels = { summary: '生成摘要', rename: '想新名字', tags: '打标签', category: '复核分类' };
