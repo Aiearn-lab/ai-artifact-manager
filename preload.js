@@ -17,6 +17,12 @@ contextBridge.exposeInMainWorld('api', {
   cancelScan: () => ipcRenderer.invoke('scan:cancel'),
   lastScan: () => ipcRenderer.invoke('scan:last'),
   searchContent: (payload) => ipcRenderer.invoke('search:content', payload),
+  watchStart: (dirs) => ipcRenderer.invoke('watch:start', dirs),
+  watchStop: () => ipcRenderer.invoke('watch:stop'),
+  watchStatus: () => ipcRenderer.invoke('watch:status'),
+  watchScanNow: (dir) => ipcRenderer.invoke('watch:scanNow', dir),
+  watchPickDir: () => ipcRenderer.invoke('watch:pickDir'),
+  onWatchFound: (fn) => ipcRenderer.on('watch:found', (e, payload) => fn(payload)),
 
   preview: (filePath) => ipcRenderer.invoke('file:preview', filePath),
   openFile: (filePath) => ipcRenderer.invoke('file:open', filePath),
@@ -27,9 +33,6 @@ contextBridge.exposeInMainWorld('api', {
   cleanupTrash: (payload) => ipcRenderer.invoke('cleanup:trash', payload),
   exportRun: (payload) => ipcRenderer.invoke('export:run', payload),
   renameFile: (payload) => ipcRenderer.invoke('file:rename', payload),
-  proActivate: (code) => ipcRenderer.invoke('pro:activate', code),
-  proDeactivate: () => ipcRenderer.invoke('pro:deactivate'),
-
   openTrash: () => ipcRenderer.invoke('trash:open'),
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashClearLog: () => ipcRenderer.invoke('trash:clearLog'),
