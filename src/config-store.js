@@ -55,6 +55,11 @@ const DEFAULTS = {
     theme: 'light',
     onboarded: false // 首次使用引导看过没有
   },
+  // 自动监控：盯住这几个文件夹，出现新文件就分类提示（不会自己动文件）
+  watch: {
+    enabled: false,
+    dirs: []
+  },
   pro: {
     activated: false,
     code: ''
