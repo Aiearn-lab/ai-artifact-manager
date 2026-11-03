@@ -209,6 +209,14 @@ function bindEvents() {
     renderList(); // 先按文件名/标签出结果，正文结果稍后补进来
     scheduleContentSearch(state.filter.q);
   });
+  $('#btnOnboardOk').addEventListener('click', async () => {
+    $('#onboardTip').classList.add('hidden');
+    try {
+      state.config = await window.api.configPatch({ ui: { onboarded: true } });
+    } catch {
+      /* 存不下就下次再说，不影响用 */
+    }
+  });
   $('#sourceFilter').addEventListener('change', (e) => {
     state.filter.source = e.target.value;
     renderList();
@@ -440,6 +448,16 @@ function renderAll() {
   renderList();
   renderCharts();
   renderPreviewEmpty();
+  maybeShowOnboard();
+}
+
+/** 首次扫描完给一条三步引导，点一次「明白了」就记住不再烦 */
+function maybeShowOnboard() {
+  const box = $('#onboardTip');
+  if (!box) return;
+  const seen = !!(state.config && state.config.ui && state.config.ui.onboarded);
+  const show = !seen && state.files.length > 0 && state.view === 'files';
+  box.classList.toggle('hidden', !show);
 }
 
 function renderNavStats() {
@@ -452,8 +470,15 @@ function renderNavStats() {
 }
 
 function baseViewFiles() {
-  if (state.view === 'knowledge') return state.files.filter((f) => (f.category && f.category.group) === 'knowledge');
-  if (state.view === 'tools') return state.files.filter((f) => (f.category && f.category.group) === 'tool');
+  // 知识库和工具库不收重复副本：那些是「同一份东西的多余拷贝」，
+  // 该去「重复文件」页处理，混在资料里只会让人以为资料很多
+  const notDup = (f) => !(f.duplicate && f.duplicate.isDuplicate);
+  if (state.view === 'knowledge') {
+    return state.files.filter((f) => (f.category && f.category.group) === 'knowledge' && notDup(f));
+  }
+  if (state.view === 'tools') {
+    return state.files.filter((f) => (f.category && f.category.group) === 'tool' && notDup(f));
+  }
   if (state.view === 'duplicates') return state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate);
   return state.files;
 }
@@ -512,9 +537,12 @@ function renderViewSummary() {
     const list = baseViewFiles();
     const chars = list.reduce((n, f) => n + (f.chars || 0), 0);
     const tags = topTags(list, 5);
+    // 重复副本会被判成「可删」，分类已经变了，所以这里按重复标记统计
+    const hiddenDup = state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate).length;
+    const dupNote = hiddenDup ? `　另有 <b>${hiddenDup}</b> 个重复副本没列在这里，去「重复文件」页能统一处理` : '';
     el.innerHTML = `知识库里已经有 <b>${list.length}</b> 份资料，共约 <b>${chars.toLocaleString()}</b> 字${
       tags.length ? `。常见主题：<b>${tags.map(esc).join('、')}</b>` : ''
-    }。`;
+    }。${dupNote}`;
     return;
   }
 
@@ -522,6 +550,7 @@ function renderViewSummary() {
     const list = baseViewFiles();
     const common = list.filter((f) => f.category && f.category.key === 'tool-common').length;
     const onetime = list.filter((f) => f.category && f.category.key === 'tool-onetime').length;
+    const hiddenDup = state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate).length;
     const langs = new Map();
     for (const f of list) {
       const l = langOf(f.ext);
@@ -534,7 +563,7 @@ function renderViewSummary() {
       .join(' · ');
     el.innerHTML = `工具库里 <b>${list.length}</b> 个脚本：常用 <span class="ok">${common}</span> 个、一次性 <span class="warn">${onetime}</span> 个${
       langText ? `。语言：${esc(langText)}` : ''
-    }。`;
+    }。${hiddenDup ? `　另有 <b>${hiddenDup}</b> 个重复副本没列在这里` : ''}`;
     return;
   }
 
@@ -850,7 +879,17 @@ function renderList() {
   if (!state.filtered.length) {
     const tip = document.createElement('div');
     tip.className = 'empty-state list-tip';
-    tip.innerHTML = '<h3>这个筛选下没有文件</h3><p>换个分类、来源，或者清掉搜索词看看。</p>';
+    if (state.view === 'knowledge') {
+      tip.innerHTML =
+        '<h3>知识库里还没有资料</h3><p>长文档（600 字以上、带标题的）会自动归到这里。<br>如果你确定扫到了文档却没有，它们可能都是重复副本，先去「重复文件」页看看。</p>';
+    } else if (state.view === 'tools') {
+      tip.innerHTML =
+        '<h3>工具库里还没有脚本</h3><p>py / js / sh / bat 这类文件会归到这里。<br>重复的脚本不会列在这里，先去「重复文件」页处理。</p>';
+    } else if (state.view === 'duplicates') {
+      tip.innerHTML = '<h3>没有发现重复文件</h3><p>内容完全相同的、以及改动很小的相似文件，都会显示在这一页。</p>';
+    } else {
+      tip.innerHTML = '<h3>这个筛选下没有文件</h3><p>换个分类、来源，或者清掉搜索词看看。</p>';
+    }
     listEl.appendChild(tip);
   } else if (state.filtered.length > MAX_RENDER) {
     const tip = document.createElement('div');
@@ -929,8 +968,19 @@ async function selectFile(id) {
   $('#previewText').textContent = '读取中…';
   const r = await window.api.preview(f.path);
   if (r && r.ok) {
-    $('#previewText').textContent = r.text || '（空文件）';
-    if (r.truncated) $('#previewText').textContent += '\n\n…（内容较长，只显示前 30 万字符）';
+    const raw = r.text || '（空文件）';
+    const tail = r.truncated ? '\n\n…（内容较长，只显示前 30 万字符）' : '';
+    const q = state.filter.q;
+    // 带着搜索词打开时，把命中的词就地标出来，并滚到第一处
+    if (q && q.length >= 2 && raw.toLowerCase().includes(q.toLowerCase())) {
+      $('#previewText').innerHTML = highlightHit(raw, q) + esc(tail);
+      requestAnimationFrame(() => {
+        const mark = $('#previewText').querySelector('mark');
+        if (mark) mark.scrollIntoView({ block: 'center' });
+      });
+    } else {
+      $('#previewText').textContent = raw + tail;
+    }
   } else {
     $('#previewText').textContent = (r && r.error) || '无法预览';
   }
