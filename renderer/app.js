@@ -14,11 +14,13 @@ const CAT_COLORS = {
 };
 
 const VIEW_COLUMNS = {
-  files: ['', '文件名', 'AI 来源', '分类', '大小', '所在路径'],
-  knowledge: ['', '文件名', '主题标签', '字数', '大小', '所在路径'],
-  tools: ['', '文件名', '类型', '语言', '大小', '所在路径'],
-  duplicates: ['', '文件名', '重复度', '保留哪份', '大小', '所在路径']
+  files: () => ['', t('list.fileName'), t('list.source'), t('list.category'), t('list.size'), t('list.path')],
+  knowledge: () => ['', t('list.fileName'), t('list.topicTag'), t('list.charsLabel'), t('list.size'), t('list.path')],
+  tools: () => ['', t('list.fileName'), t('list.category'), 'Lang', t('list.size'), t('list.path')],
+  duplicates: () => ['', t('list.fileName'), t('list.dupRatio'), t('list.keepWhich'), t('list.size'), t('list.path')],
+  trash: () => ['', t('list.fileName'), t('list.time'), t('list.action'), t('list.size'), t('list.path')]
 };
+const DEFAULT_COLUMNS = () => ['', t('list.fileName'), t('list.source'), t('list.category'), t('list.size'), t('list.path')];
 
 const LANG_MAP = {
   '.py': 'Python', '.js': 'JavaScript', '.mjs': 'JavaScript', '.cjs': 'JavaScript',
@@ -51,6 +53,59 @@ const state = {
   // 自动监控状态
   watch: { enabled: false, dirs: [], recent: [] }
 };
+
+/* ---------------- 多语言 ---------------- */
+// 默认跟系统语言走；用户在设置里选过就用存的
+let LANG = 'zh';
+
+function t(key, vars) {
+  const dict = (window.I18N && window.I18N[LANG]) || {};
+  let str = dict[key];
+  if (str === undefined) {
+    // 没翻到的先用中文兜底，方便一眼看出哪里漏了
+    str = (window.I18N && window.I18N.zh && window.I18N.zh[key]) || key;
+  }
+  if (vars) {
+    for (const k of Object.keys(vars)) {
+      str = str.split('{' + k + '}').join(String(vars[k]));
+    }
+  }
+  return str;
+}
+
+function detectLang() {
+  const saved = state.config && state.config.ui && state.config.ui.lang;
+  if (saved === 'zh' || saved === 'en') return saved;
+  const sys = String(navigator.language || 'zh').toLowerCase();
+  return sys.startsWith('zh') ? 'zh' : 'en';
+}
+
+/** 把页面上所有打了标记的文案换成当前语言 */
+function applyLang() {
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('app.name');
+
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+}
+
+async function setLang(lang) {
+  LANG = lang === 'en' ? 'en' : 'zh';
+  try {
+    state.config = await window.api.configPatch({ ui: { lang: LANG } });
+  } catch {
+    /* 存不下也能用，只是下次启动回到自动判断 */
+  }
+  applyLang();
+  renderAll();
+}
 
 /* ---------------- 基础工具 ---------------- */
 function fmtSize(bytes) {
@@ -115,6 +170,10 @@ async function init() {
   } catch {
     /* 配置读不到也能用默认值 */
   }
+
+  // 语言：用户选过就用选的，没选过跟系统
+  LANG = detectLang();
+  applyLang();
 
   try {
     state.appPaths = await window.api.appPaths();
@@ -228,6 +287,14 @@ function bindEvents() {
     state.filter.q = e.target.value.trim();
     renderList(); // 先按文件名/标签出结果，正文结果稍后补进来
     scheduleContentSearch(state.filter.q);
+  });
+  $('#setLang').addEventListener('change', async (e) => {
+    const v = e.target.value;
+    if (v) await setLang(v);
+    else {
+      const auto = detectLang();
+      await setLang(auto);
+    }
   });
   $('#btnWatchAdd').addEventListener('click', addWatchDir);
   $('#btnWatchToggle').addEventListener('click', toggleWatch);
@@ -508,10 +575,10 @@ function maybeShowOnboard() {
 function renderNavStats() {
   const s = state.scan && state.scan.summary;
   if (!s) {
-    $('#navStats').textContent = '还没有扫描';
+    $('#navStats').textContent = t('ov.notScanned');
     return;
   }
-  $('#navStats').textContent = `共 ${s.files} 个 · ${fmtSize(s.size)} · 可清理 ${fmtSize(s.cleanableSize)}`;
+  $('#navStats').textContent = `${s.files} · ${fmtSize(s.size)}`;
 }
 
 function baseViewFiles() {
@@ -554,18 +621,18 @@ function renderViewSummary() {
     const groups = (s && s.duplicateStats && s.duplicateStats.groups) || 0;
     el.innerHTML = `<div class="overview-strip">
       <div class="mini-stats">
-        <div class="mini-stat"><span class="ms-label">找到的文件</span><span class="ms-value">${
+        <div class="mini-stat"><span class="ms-label">${t('ov.files')}</span><span class="ms-value">${
           s ? all.length : 0
-        }</span><span class="ms-sub">${s ? `${keep} 个建议留 · ${clean} 个可清理` : '还没扫描'}</span></div>
-        <div class="mini-stat"><span class="ms-label">占用空间</span><span class="ms-value">${
+        }</span><span class="ms-sub">${s ? t('ov.keepHint', { keep, clean }) : t('ov.notScanned')}</span></div>
+        <div class="mini-stat"><span class="ms-label">${t('ov.size')}</span><span class="ms-value">${
           s ? fmtSize(s.size) : '—'
-        }</span><span class="ms-sub">AI 产出合计</span></div>
-        <div class="mini-stat"><span class="ms-label">可以清理</span><span class="ms-value warn">${
+        }</span><span class="ms-sub">${t('ov.aiTotal')}</span></div>
+        <div class="mini-stat"><span class="ms-label">${t('ov.cleanable')}</span><span class="ms-value warn">${
           s ? fmtSize(s.cleanableSize) : '—'
-        }</span><span class="ms-sub">草稿 / 空洞 / 重复</span></div>
-        <div class="mini-stat"><span class="ms-label">重复可释放</span><span class="ms-value warn">${
+        }</span><span class="ms-sub">${t('ov.cleanSub')}</span></div>
+        <div class="mini-stat"><span class="ms-label">${t('ov.dupFree')}</span><span class="ms-value warn">${
           s ? fmtSize(s.duplicateSize || 0) : '—'
-        }</span><span class="ms-sub">${groups} 组重复</span></div>
+        }</span><span class="ms-sub">${t('ov.dupGroups', { n: groups })}</span></div>
       </div>
       <div class="mini-chart" id="miniChart"></div>
     </div>`;
@@ -574,7 +641,7 @@ function renderViewSummary() {
   }
 
   if (!s) {
-    el.innerHTML = '先选一个位置，点「扫描整个电脑」或「一键扫常用位置」';
+    el.innerHTML = t('ov.firstHint');
     return;
   }
 
@@ -699,10 +766,10 @@ function renderSourceFilter() {
   const sel = $('#sourceFilter');
   const s = state.scan && state.scan.summary;
   if (!s) {
-    sel.innerHTML = '<option value="all">全部来源</option>';
+    sel.innerHTML = `<option value="all">${t('tb.allSources')}</option>`;
     return;
   }
-  const opts = ['<option value="all">全部来源</option>'];
+  const opts = [`<option value="all">${t('tb.allSources')}</option>`];
   for (const src of s.bySource || []) {
     opts.push(`<option value="${esc(src.id)}">${esc(src.name)} (${src.count})</option>`);
   }
@@ -714,7 +781,8 @@ function renderSourceFilter() {
 }
 
 function renderTableHead() {
-  const cols = VIEW_COLUMNS[state.view] || VIEW_COLUMNS.files;
+  const make = VIEW_COLUMNS[state.view] || DEFAULT_COLUMNS;
+  const cols = make();
   $('#tableHead').innerHTML = cols.map((c) => `<span>${esc(c)}</span>`).join('');
 }
 
@@ -797,6 +865,36 @@ function scheduleContentSearch(q) {
   }, 350);
 }
 
+
+/** 分类 key → 词典键 */
+const CAT_KEY = {
+  knowledge: 'cat.knowledge',
+  'tool-common': 'cat.toolCommon',
+  'tool-onetime': 'cat.toolOneTime',
+  junk: 'cat.junk',
+  other: 'cat.other'
+};
+
+function sourceName(f) {
+  const src = f.source || {};
+  if (!src.id || src.id === 'unknown') return LANG === 'zh' ? '未识别' : 'Unknown';
+  return src.name || (LANG === 'zh' ? '未识别' : 'Unknown');
+}
+
+function catLabel(f) {
+  const k = f.category && f.category.key;
+  return CAT_KEY[k] ? t(CAT_KEY[k]) : (f.category && f.category.label) || t('cat.other');
+}
+
+function keepLabel(f) {
+  const k = f.category && f.category.key;
+  if (k === 'knowledge') return t('keep.knowledge');
+  if (k === 'tool-common') return t('keep.toolCommon');
+  if (k === 'tool-onetime') return t('keep.toolOneTime');
+  if (k === 'junk') return t('keep.junk');
+  return t('keep.other');
+}
+
 /** 把搜索词在文本里标出来（先转义再包 mark，避免 XSS） */
 function highlightHit(text, q) {
   const t = String(text || '');
@@ -833,7 +931,7 @@ function rowCells(f) {
   const nameCell = `<div class="fname-wrap"><div class="fname">
     <span class="fext ${esc((f.ext || '').replace('.', ''))}">${esc(extLabel)}</span>
     <span class="fname-text" title="${esc(f.name)}">${esc(f.name)}</span>
-    ${dup ? '<span class="dup-flag">重复</span>' : ''}
+    ${dup ? `<span class="dup-flag">${LANG === 'zh' ? '重复' : 'Dup'}</span>` : ''}
   </div>${hitLine}</div>`;
 
   if (state.view === 'knowledge') {
@@ -874,8 +972,8 @@ function rowCells(f) {
     name: nameCell,
     c3: `<div class="source-badge"><span class="source-dot" style="background:${esc(
       (f.source && f.source.color) || '#94a3b8'
-    )}"></span><span class="source-name">${esc((f.source && f.source.name) || '未识别')}</span></div>`,
-    c4: `<span class="cat-badge cat-${esc(cat.key)}">${esc(cat.label || '其他')}</span>`
+    )}"></span><span class="source-name">${esc(sourceName(f))}</span></div>`,
+    c4: `<span class="cat-badge cat-${esc(cat.key)}">${esc(catLabel(f))}</span>`
   };
 }
 
@@ -925,35 +1023,35 @@ function renderList() {
     const tip = document.createElement('div');
     tip.className = 'empty-state list-tip';
     if (state.view === 'knowledge') {
-      tip.innerHTML =
-        '<h3>知识库里还没有资料</h3><p>长文档（600 字以上、带标题的）会自动归到这里。<br>如果你确定扫到了文档却没有，它们可能都是重复副本，先去「重复文件」页看看。</p>';
+      tip.innerHTML = `<h3>${t('list.emptyKnowledge')}</h3><p>${t('list.emptyKnowledgeHint')}</p>`;
     } else if (state.view === 'tools') {
-      tip.innerHTML =
-        '<h3>工具库里还没有脚本</h3><p>py / js / sh / bat 这类文件会归到这里。<br>重复的脚本不会列在这里，先去「重复文件」页处理。</p>';
+      tip.innerHTML = `<h3>${t('list.emptyTools')}</h3><p>${t('list.emptyToolsHint')}</p>`;
     } else if (state.view === 'duplicates') {
-      tip.innerHTML = '<h3>没有发现重复文件</h3><p>内容完全相同的、以及改动很小的相似文件，都会显示在这一页。</p>';
+      tip.innerHTML = `<h3>${t('list.emptyDup')}</h3><p>${t('list.emptyDupHint')}</p>`;
     } else {
-      tip.innerHTML = '<h3>这个筛选下没有文件</h3><p>换个分类、来源，或者清掉搜索词看看。</p>';
+      tip.innerHTML = `<h3>${t('list.empty')}</h3><p>${t('list.emptyHint')}</p>`;
     }
     listEl.appendChild(tip);
   } else if (state.filtered.length > MAX_RENDER) {
     const tip = document.createElement('div');
     tip.className = 'list-tip';
     tip.style.cssText = 'padding:12px 16px;font-size:12px;color:#98a2b3;text-align:center;';
-    tip.textContent = `共 ${state.filtered.length} 个文件，为保证流畅只显示前 ${MAX_RENDER} 个。用搜索或筛选缩小范围。`;
+    tip.textContent = t('list.tooMany', { n: state.filtered.length, max: MAX_RENDER });
     listEl.appendChild(tip);
   }
 
   updateSelectionUI();
   const q = state.filter.q;
-  let status = `共 ${state.files.length} 个文件 · 当前显示 ${state.filtered.length} 个`;
+  let status = t('status.count', { n: state.files.length, shown: state.filtered.length });
   if (q && q.length >= 2) {
     if (state.contentSearching) {
-      status = `正在翻文件内容找「${q}」… 目前 ${state.filtered.length} 个`;
+      status = t('status.searchingBody', { q, n: state.filtered.length });
     } else if (state.contentHits.size) {
-      status = `「${q}」找到 ${state.filtered.length} 个，其中 ${state.contentHits.size} 个是在正文里搜到的`;
+      status = t('status.searchHits', { q, total: state.filtered.length, body: state.contentHits.size });
     } else if (state.contentScanned) {
-      status = `「${q}」找到 ${state.filtered.length} 个${state.contentPartial ? '（文件太多，正文只翻了一部分）' : '，正文也翻过了'}`;
+      status =
+        t('status.searchDone', { q, total: state.filtered.length }) +
+        (state.contentPartial ? t('status.searchPartial') : t('status.searchFull'));
     }
   }
   $('#statusText').textContent = status;
@@ -965,8 +1063,8 @@ function updateSelectionUI() {
   const all = $('#selectAll');
   all.checked = n > 0 && n === total;
   all.indeterminate = n > 0 && n < total;
-  $('#btnArchive').textContent = n ? `归档 (${n})` : '归档';
-  $('#btnExport').textContent = n ? `导出 (${n})` : '导出';
+  $('#btnArchive').textContent = n ? `${t('tb.archive')} (${n})` : t('tb.archive');
+  $('#btnExport').textContent = n ? `${t('tb.export')} (${n})` : t('tb.export');
 }
 
 /* ---------------- 预览 ---------------- */
@@ -997,10 +1095,16 @@ function refreshWatchUI() {
   const txt = $('#watchStatusText');
   const btn = $('#btnWatchToggle');
   if (txt) {
-    txt.textContent = w.enabled ? `正在盯 ${w.dirs.length} 个文件夹` : '未开启';
+    txt.textContent = w.enabled
+      ? LANG === 'zh'
+        ? `正在盯 ${w.dirs.length} 个文件夹`
+        : `Watching ${w.dirs.length} folder(s)`
+      : LANG === 'zh'
+      ? '未开启'
+      : 'Off';
     txt.style.color = w.enabled ? '#059669' : '';
   }
-  if (btn) btn.textContent = w.enabled ? '停止监控' : '开启监控';
+  if (btn) btn.textContent = w.enabled ? (LANG === 'zh' ? '停止监控' : 'Stop') : LANG === 'zh' ? '开启监控' : 'Start';
   renderWatchDirs();
 
   const bar = $('#watchBar');
@@ -1076,11 +1180,13 @@ async function selectFile(id) {
 
   const cat = f.category || {};
   const chips = [
-    `<span class="meta-chip">来源 <b>${esc((f.source && f.source.name) || '未识别')}</b></span>`,
-    `<span class="meta-chip">分类 <b>${esc(cat.label || '其他')}</b></span>`,
-    `<span class="meta-chip">建议 <b>${esc(cat.retention || '')}</b></span>`,
-    `<span class="meta-chip">大小 <b>${fmtSize(f.size)}</b></span>`,
-    `<span class="meta-chip">修改 <b>${fmtTime(f.mtime)}</b></span>`
+    `<span class="meta-chip">${LANG === 'zh' ? '来源' : 'Source'} <b>${esc(
+      sourceName(f)
+    )}</b></span>`,
+    `<span class="meta-chip">${LANG === 'zh' ? '分类' : 'Category'} <b>${esc(catLabel(f))}</b></span>`,
+    `<span class="meta-chip">${LANG === 'zh' ? '建议' : 'Advice'} <b>${esc(keepLabel(f))}</b></span>`,
+    `<span class="meta-chip">${LANG === 'zh' ? '大小' : 'Size'} <b>${fmtSize(f.size)}</b></span>`,
+    `<span class="meta-chip">${LANG === 'zh' ? '修改' : 'Modified'} <b>${fmtTime(f.mtime)}</b></span>`
   ];
   if (f.duplicate && f.duplicate.isDuplicate) {
     chips.push(
@@ -1633,6 +1739,8 @@ async function openSettings() {
   const c = state.config || (await window.api.configGet());
   state.config = c;
 
+  const langSel = $('#setLang');
+  if (langSel) langSel.value = (c.ui && c.ui.lang) || '';
   $('#setArchiveRoot').value = c.archiveRoot || '';
   $('#setArchiveMode').value = c.archiveMode || 'move';
   $('#setMaxDepth').value = c.maxDepth || 14;
