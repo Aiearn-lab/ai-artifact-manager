@@ -42,7 +42,12 @@ const state = {
   mcp: null,
   disks: [],
   appPaths: {},
-  busy: false
+  busy: false,
+  // 全文搜索：内容命中的文件（path -> { count, snippet }），和元数据搜索分开管
+  contentHits: new Map(),
+  contentSearching: false,
+  contentScanned: 0,
+  contentPartial: false
 };
 
 /* ---------------- 基础工具 ---------------- */
@@ -201,7 +206,8 @@ function bindEvents() {
 
   $('#searchInput').addEventListener('input', (e) => {
     state.filter.q = e.target.value.trim();
-    renderList();
+    renderList(); // 先按文件名/标签出结果，正文结果稍后补进来
+    scheduleContentSearch(state.filter.q);
   });
   $('#sourceFilter').addEventListener('change', (e) => {
     state.filter.source = e.target.value;
@@ -416,6 +422,11 @@ function applyScan(scan) {
   state.files = scan.files || [];
   state.selection.clear();
   state.currentId = null;
+  // 换了扫描结果，上一次的正文搜索结果就作废了
+  state.contentHits = new Map();
+  state.contentSearching = false;
+  state.contentScanned = 0;
+  state.contentPartial = false;
   renderAll();
 }
 
@@ -644,6 +655,8 @@ function computeFiltered() {
   if (state.filter.q) {
     const needle = state.filter.q.toLowerCase();
     list = list.filter((f) => {
+      // 文件名 / 路径 / 标签命中，或者正文里搜到了（contentHits）
+      if (state.contentHits.has(f.path)) return true;
       const hay = [
         f.name,
         f.path,
@@ -667,16 +680,87 @@ function computeFiltered() {
   return list.sort(cmp);
 }
 
+/* ---------------- 全文搜索 ---------------- */
+let contentTimer = null;
+let contentRequestId = 0;
+
+function scheduleContentSearch(q) {
+  clearTimeout(contentTimer);
+  const reset = () => {
+    state.contentHits = new Map();
+    state.contentSearching = false;
+    state.contentScanned = 0;
+    state.contentPartial = false;
+  };
+
+  if (!q || q.length < 2 || !state.files.length) {
+    const had = state.contentHits.size || state.contentSearching;
+    reset();
+    if (had) renderList();
+    return;
+  }
+
+  reset();
+  state.contentSearching = true;
+  renderList(); // 先把「正在翻正文」的状态显示出来
+  const myId = ++contentRequestId;
+
+  contentTimer = setTimeout(async () => {
+    let r = null;
+    try {
+      r = await window.api.searchContent({ q });
+    } catch {
+      r = null;
+    }
+    if (myId !== contentRequestId) return; // 用户又改了关键词，这份结果作废
+    state.contentSearching = false;
+    if (r && r.ok) {
+      state.contentHits = new Map((r.hits || []).map((h) => [h.path, h]));
+      state.contentScanned = r.scanned || 0;
+      state.contentPartial = !!r.partial;
+    }
+    renderList();
+  }, 350);
+}
+
+/** 把搜索词在文本里标出来（先转义再包 mark，避免 XSS） */
+function highlightHit(text, q) {
+  const t = String(text || '');
+  const needle = String(q || '').toLowerCase();
+  if (!needle) return esc(t);
+  const lower = t.toLowerCase();
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const j = lower.indexOf(needle, i);
+    if (j === -1) {
+      out += esc(t.slice(i));
+      break;
+    }
+    out += esc(t.slice(i, j)) + '<mark>' + esc(t.slice(j, j + needle.length)) + '</mark>';
+    i = j + needle.length;
+  }
+  return out;
+}
+
 function rowCells(f) {
   const cat = f.category || { key: 'other', label: '其他', retention: '按需留存' };
   const extLabel = (f.ext || '').replace('.', '').slice(0, 5) || 'FILE';
   const dup = f.duplicate && f.duplicate.isDuplicate;
 
-  const nameCell = `<div class="fname">
+  // 正文搜到的文件，在文件名下面带一行命中片段，省得逐个点开确认
+  const hit = state.filter.q ? state.contentHits.get(f.path) : null;
+  const hitLine = hit
+    ? `<div class="hit-line" title="${esc(hit.snippet)}">${highlightHit(hit.snippet, state.filter.q)}${
+        hit.count > 1 ? ` <span class="hit-count">共 ${hit.count} 处</span>` : ''
+      }</div>`
+    : '';
+
+  const nameCell = `<div class="fname-wrap"><div class="fname">
     <span class="fext ${esc((f.ext || '').replace('.', ''))}">${esc(extLabel)}</span>
     <span class="fname-text" title="${esc(f.name)}">${esc(f.name)}</span>
     ${dup ? '<span class="dup-flag">重复</span>' : ''}
-  </div>`;
+  </div>${hitLine}</div>`;
 
   if (state.view === 'knowledge') {
     // 只放主标签：两个标签在窄列里总有一个被截成「数…」，反而不好读
@@ -777,7 +861,18 @@ function renderList() {
   }
 
   updateSelectionUI();
-  $('#statusText').textContent = `共 ${state.files.length} 个文件 · 当前显示 ${state.filtered.length} 个`;
+  const q = state.filter.q;
+  let status = `共 ${state.files.length} 个文件 · 当前显示 ${state.filtered.length} 个`;
+  if (q && q.length >= 2) {
+    if (state.contentSearching) {
+      status = `正在翻文件内容找「${q}」… 目前 ${state.filtered.length} 个`;
+    } else if (state.contentHits.size) {
+      status = `「${q}」找到 ${state.filtered.length} 个，其中 ${state.contentHits.size} 个是在正文里搜到的`;
+    } else if (state.contentScanned) {
+      status = `「${q}」找到 ${state.filtered.length} 个${state.contentPartial ? '（文件太多，正文只翻了一部分）' : '，正文也翻过了'}`;
+    }
+  }
+  $('#statusText').textContent = status;
 }
 
 function updateSelectionUI() {
