@@ -893,9 +893,13 @@ const CAT_KEY = {
   other: 'cat.other'
 };
 
+// 英文界面里只有「豆包」需要换成官方英文名，其他 AI 名字本来就是英文
+const SOURCE_EN = { doubao: 'Doubao' };
+
 function sourceName(f) {
   const src = f.source || {};
   if (!src.id || src.id === 'unknown') return LANG === 'zh' ? '未识别' : 'Unknown';
+  if (LANG !== 'zh' && SOURCE_EN[src.id]) return SOURCE_EN[src.id];
   return src.name || (LANG === 'zh' ? '未识别' : 'Unknown');
 }
 
@@ -1944,7 +1948,13 @@ function renderStats() {
   $('#statCleanable').textContent = fmtSize(s.cleanableSize);
   $('#statDuplicate').textContent = fmtSize(s.duplicateSize || 0);
   const ds = s.duplicateStats || {};
-  $('#statDuplicateNote').textContent = ds.groups ? `${ds.groups} 组重复 / 相似` : '没有发现重复';
+  $('#statDuplicateNote').textContent = ds.groups
+    ? LANG === 'zh'
+      ? `${ds.groups} 组重复 / 相似`
+      : `${ds.groups} groups`
+    : LANG === 'zh'
+    ? '没有发现重复'
+    : 'none found';
 }
 
 function renderCharts() {
@@ -1961,14 +1971,23 @@ function renderCharts() {
 
   const sources = (s.bySource || []).slice(0, 6);
   const total = sources.reduce((n, x) => n + x.count, 0) || 1;
-  renderDonut(sourceEl, sources.map((x) => ({ label: x.name, value: x.count, color: x.color || '#94a3b8' })), total);
+  const srcLabel = (x) => {
+    if (LANG === 'zh') return x.name;
+    if (x.id === 'unknown') return 'Unknown';
+    return SOURCE_EN[x.id] || x.name;
+  };
+  renderDonut(
+    sourceEl,
+    sources.map((x) => ({ label: srcLabel(x), value: x.count, color: x.color || '#94a3b8' })),
+    total
+  );
 
   const cats = (s.byCategory || []).slice(0, 5);
   const catMax = Math.max(...cats.map((x) => x.count), 1);
   renderBars(
     catEl,
     cats.map((x) => ({
-      label: x.label,
+      label: LANG !== 'zh' && CAT_KEY[x.key] ? t(CAT_KEY[x.key]) : x.label,
       value: x.count,
       color: CAT_COLORS[x.key] || '#94a3b8',
       ratio: x.count / catMax
