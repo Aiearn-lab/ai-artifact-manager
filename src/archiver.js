@@ -40,12 +40,11 @@ async function uniqueTarget(dir, fileName) {
 }
 
 /**
- * 按分类归档。默认复制（不动原文件），mode='move' 时才剪切。
+ * 按分类归档。一律移动（剪切），原位置不再保留——这是整理工具，永远不做复制，
+ * 否则「越清越多」。跨盘移动时底层先复制再删原文件，那是对用户不可见的实现细节。
  * 目标结构：<archiveRoot>/<分类目录>/<文件名>
  */
-async function archive(files, archiveRoot, options) {
-  const opts = options || {};
-  const mode = opts.mode === 'move' ? 'move' : 'copy';
+async function archive(files, archiveRoot) {
   const root = path.resolve(archiveRoot);
 
   if (!root) throw new Error('归档目录不能为空');
@@ -56,7 +55,7 @@ async function archive(files, archiveRoot, options) {
     skipped: [],
     done: [],
     target: root,
-    mode,
+    mode: 'move',
     byDir: {}
   };
 
@@ -74,19 +73,16 @@ async function archive(files, archiveRoot, options) {
 
       const targetPath = await uniqueTarget(targetDir, file.name);
 
-      if (mode === 'move') {
-        try {
-          await fsp.rename(file.path, targetPath);
-        } catch (err) {
-          if (err.code === 'EXDEV') {
-            await fsp.copyFile(file.path, targetPath);
-            await fsp.unlink(file.path);
-          } else {
-            throw err;
-          }
+      try {
+        await fsp.rename(file.path, targetPath);
+      } catch (err) {
+        if (err.code === 'EXDEV') {
+          // 跨盘 rename 不行：先落到目标盘，再删原文件，净效果仍是移动
+          await fsp.copyFile(file.path, targetPath);
+          await fsp.unlink(file.path);
+        } else {
+          throw err;
         }
-      } else {
-        await fsp.copyFile(file.path, targetPath);
       }
 
       result.ok += 1;
