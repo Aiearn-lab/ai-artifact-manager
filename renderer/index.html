@@ -79,6 +79,12 @@
           <button class="btn btn-primary btn-sm" id="btnOnboardOk" type="button">明白了</button>
         </div>
 
+        <div class="watch-bar hidden" id="watchBar">
+          <span class="wb-dot"></span>
+          <span class="wb-text" id="watchBarText">自动监控已开启</span>
+          <button class="btn btn-ghost btn-sm" id="btnWatchShow" type="button">看看新文件</button>
+        </div>
+
         <div class="list-toolbar">
           <div class="search-wrap">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -183,7 +189,7 @@
       <span class="status-right">
         <a href="#" id="linkHomepage">智维工作室 · zhiweistudio.com.cn</a>
         <span class="dot">·</span>
-        <span id="statusVersion">v0.4.2</span>
+        <span id="statusVersion">v0.5.0</span>
       </span>
     </footer>
 
@@ -264,7 +270,6 @@
         <button class="active" data-tab="general" type="button">常规</button>
         <button data-tab="ai" type="button">AI 接入</button>
         <button data-tab="mcp" type="button">MCP 服务</button>
-        <button data-tab="pro" type="button">Pro 版</button>
         <button data-tab="about" type="button">关于</button>
       </nav>
 
@@ -323,6 +328,19 @@
               <span class="inline-status" id="ctxStatus">检测中…</span>
             </div>
             <p class="hint">装好后，在资源管理器里右键任意文件夹，可以直接用 AI产出管家 扫描。</p>
+          </div>
+
+          <div class="field">
+            <label>自动监控</label>
+            <p class="hint">
+              盯住几个文件夹，出现新的 AI 文件就自动分好类提醒你。<b>只提示，不会自己搬动或删你的文件。</b>
+            </p>
+            <div class="field-row">
+              <button id="btnWatchAdd" class="btn btn-ghost btn-sm" type="button">选一个文件夹</button>
+              <button id="btnWatchToggle" class="btn btn-primary btn-sm" type="button">开启监控</button>
+              <span class="inline-status" id="watchStatusText">未开启</span>
+            </div>
+            <div class="watch-dirs" id="watchDirs"></div>
           </div>
 
           <div class="modal-actions">
@@ -415,38 +433,6 @@
           </div>
         </section>
 
-        <section class="settings-panel" data-panel="pro">
-          <div class="pro-hero">
-            <span class="pill pill-pro">Pro</span>
-            <h3>等有需要了再升级</h3>
-            <p>核心功能永久免费。Pro 是给「文件已经多到自己管不动」的人准备的。</p>
-          </div>
-
-          <ul class="pro-list">
-            <li><strong>自然语言找文件</strong><span>说「上周那份关于小红书的调研」就能找到</span></li>
-            <li><strong>后台自动监控</strong><span>指定文件夹新增 AI 文件，自动识别归档</span></li>
-            <li><strong>批量智能重命名 + 标签体系</strong><span>一次整理几百个文件</span></li>
-            <li><strong>知识库格式导出</strong><span>一键导出 Obsidian / Logseq 兼容格式</span></li>
-            <li><strong>脚本自动写使用说明</strong><span>给代码补运行方法、依赖说明</span></li>
-            <li><strong>同主题内容整合</strong><span>把零散笔记合成一份完整文档</span></li>
-            <li><strong>优先更新 + 专属支持</strong><span>新功能先用，问题优先答</span></li>
-          </ul>
-
-          <div class="price-row">
-            <div class="price-card"><span>年付</span><strong>¥19</strong><em>/ 年</em></div>
-            <div class="price-card"><span>永久</span><strong>¥39</strong><em>买断</em></div>
-          </div>
-
-          <div class="field">
-            <label>Pro 激活码</label>
-            <div class="pro-activate">
-              <input id="proCode" type="text" placeholder="填入激活码，例如 ZW-XXXX-XXXX-1" autocomplete="off">
-              <button class="btn btn-primary btn-sm" id="btnProActivate" type="button">激活</button>
-            </div>
-            <p class="hint" id="proStatus">还没激活。核心功能不受影响，Pro 只是多几个省事的功能。</p>
-          </div>
-        </section>
-
         <section class="settings-panel" data-panel="about">
           <div class="about-hero">
             <div class="logo large">
@@ -457,7 +443,7 @@
               </svg>
             </div>
             <h3>AI产出管家</h3>
-            <p class="about-version" id="aboutVersion">v0.4.2</p>
+            <p class="about-version" id="aboutVersion">v0.5.0</p>
             <p class="about-desc">专门管理 AI 产出文件的本地工具。免费开源，不卖算力，不碰你的文件内容。</p>
           </div>
 
