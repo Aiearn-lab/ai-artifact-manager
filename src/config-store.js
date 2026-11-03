@@ -52,7 +52,8 @@ const DEFAULTS = {
     token: ''
   },
   ui: {
-    theme: 'light'
+    theme: 'light',
+    onboarded: false // 首次使用引导看过没有
   },
   pro: {
     activated: false,
