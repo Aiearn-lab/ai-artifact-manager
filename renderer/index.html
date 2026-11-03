@@ -161,18 +161,18 @@
           </div>
 
           <div class="preview-actions-bar">
-            <button id="btnPreviewOpen" class="btn btn-ghost btn-sm" type="button">用系统软件打开</button>
-            <button id="btnPreviewReveal" class="btn btn-ghost btn-sm" type="button">在文件夹里找到它</button>
-            <button id="btnPreviewArchive" class="btn btn-ghost btn-sm" type="button">归档这个文件</button>
+            <button id="btnPreviewOpen" class="btn btn-ghost btn-sm" type="button" data-i18n="act.open">用系统软件打开</button>
+            <button id="btnPreviewReveal" class="btn btn-ghost btn-sm" type="button" data-i18n="act.reveal">在文件夹里找到它</button>
+            <button id="btnPreviewArchive" class="btn btn-ghost btn-sm" type="button" data-i18n="act.archiveOne">归档这个文件</button>
           </div>
 
           <div class="preview-meta" id="previewMeta"></div>
 
           <div class="preview-tools">
-            <button id="btnAiSummary" class="btn btn-ghost btn-sm btn-ai" type="button">AI 摘要</button>
-            <button id="btnAiRename" class="btn btn-ghost btn-sm btn-ai" type="button">AI 起名</button>
-            <button id="btnAiTags" class="btn btn-ghost btn-sm btn-ai" type="button">AI 打标签</button>
-            <button id="btnAiCategory" class="btn btn-ghost btn-sm btn-ai" type="button">AI 复核分类</button>
+            <button id="btnAiSummary" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiSummary">AI 摘要</button>
+            <button id="btnAiRename" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiRename">AI 起名</button>
+            <button id="btnAiTags" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiTags">AI 打标签</button>
+            <button id="btnAiCategory" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiReview">AI 复核分类</button>
           </div>
 
           <div class="ai-result hidden" id="aiResult"></div>
@@ -218,39 +218,39 @@
   <div class="modal-mask hidden" id="statsModal">
     <div class="modal">
       <header class="modal-head">
-        <h2>统计</h2>
+        <h2 data-i18n="stats.title">统计</h2>
         <button class="icon-btn" id="btnCloseStats" type="button" title="关闭">×</button>
       </header>
       <div class="stats-body">
         <div class="stat-cards">
           <div class="stat-card">
-            <span class="stat-label">找到的文件</span>
+            <span class="stat-label" data-i18n="ov.files">找到的文件</span>
             <strong class="stat-value" id="statFiles">—</strong>
-            <span class="stat-note">AI 产出的文本文件</span>
+            <span class="stat-note" data-i18n="stats.noteFiles">AI 产出的文本文件</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">占用空间</span>
+            <span class="stat-label" data-i18n="ov.size">占用空间</span>
             <strong class="stat-value" id="statSize">—</strong>
-            <span class="stat-note">合计大小</span>
+            <span class="stat-note" data-i18n="stats.noteSize">合计大小</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">可以清理</span>
+            <span class="stat-label" data-i18n="ov.cleanable">可以清理</span>
             <strong class="stat-value accent-warn" id="statCleanable">—</strong>
-            <span class="stat-note">草稿 / 空洞 / 重复</span>
+            <span class="stat-note" data-i18n="ov.cleanSub">草稿 / 空洞 / 重复</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">重复可释放</span>
+            <span class="stat-label" data-i18n="ov.dupFree">重复可释放</span>
             <strong class="stat-value accent-danger" id="statDuplicate">—</strong>
             <span class="stat-note" id="statDuplicateNote">还没扫</span>
           </div>
         </div>
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-head"><h3>AI 来源占比</h3><span class="chart-sub">按文件数</span></div>
+            <div class="chart-head"><h3 data-i18n="stats.bySource">AI 来源占比</h3><span class="chart-sub" data-i18n="stats.byCount">按文件数</span></div>
             <div class="chart-body" id="sourceChart"><div class="chart-empty">扫描后显示</div></div>
           </div>
           <div class="chart-card">
-            <div class="chart-head"><h3>分类占比</h3><span class="chart-sub">按文件数</span></div>
+            <div class="chart-head"><h3 data-i18n="stats.byCategory">分类占比</h3><span class="chart-sub" data-i18n="stats.byCount">按文件数</span></div>
             <div class="chart-body" id="categoryChart"><div class="chart-empty">扫描后显示</div></div>
           </div>
         </div>
