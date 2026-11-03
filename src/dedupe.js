@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { DRAFT_NAME_PATTERNS } = require('./scanner');
 
 const MAX_READ = 1024 * 1024; // 单文件最多读 1MB 做比对
-const SIMILARITY_THRESHOLD = 0.82;
+const SIMILARITY_THRESHOLD = 0.95;
 const SHINGLE_SIZE = 3;
 const MAX_SHINGLES = 2500;
 const NEIGHBOR_WINDOW = 12; // 每个文件只和附近 12 个比，避免 O(n²)
