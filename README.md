@@ -17,7 +17,7 @@
 
 ## 直接下载用
 
-**[⬇ 下载 AI产出管家 0.4.0（Windows 64 位，95 MB）](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.4.0-portable.exe)**
+**[⬇ 下载 AI产出管家 0.4.1（Windows 64 位，95 MB）](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.4.1-portable.exe)**
 
 双击就能跑，不用安装、不用注册。配置和数据都放在 exe 旁边的「AI产出管家数据」文件夹，整个文件夹拷走就能换电脑接着用。
 
