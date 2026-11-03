@@ -1,7 +1,12 @@
 node_modules/
 dist/
+build_v*/
+release/
+_build_residue/
+_upload/
 _testdata/
 _test/
+AI产出管家数据/
 AI工件管家数据/
 *.log
 .DS_Store
