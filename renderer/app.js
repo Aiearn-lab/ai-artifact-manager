@@ -82,12 +82,16 @@ function toast(msg, isError) {
 
 function setBusy(v) {
   state.busy = v;
-  ['#btnScanScope', '#btnQuickScan', '#btnPickFolder', '#btnEmptyScan', '#btnEmptyFolder'].forEach((sel) => {
+  ['#btnQuickScan', '#btnPickFolder', '#btnEmptyScan', '#btnEmptyFolder'].forEach((sel) => {
     const el = $(sel);
     if (el) el.disabled = v;
   });
   const scope = $('#btnScanScope');
-  if (scope) scope.textContent = v ? '正在扫描…' : '扫描整个电脑';
+  if (scope) {
+    scope.textContent = v ? '停止扫描' : '扫描整个电脑';
+    scope.classList.toggle('btn-primary', !v);
+    scope.classList.toggle('btn-danger-ghost', v);
+  }
 }
 
 function langOf(ext) {
@@ -143,7 +147,7 @@ async function init() {
       classifying: '正在分类…',
       deduping: '正在找重复内容…'
     }[p.phase] || '处理中…';
-    $('#statusText').textContent = label;
+    $('#statusText').textContent = p.phase === 'scanning' && p.done ? `已扫描 ${p.done} 个文件…` : label;
   });
 
   window.api.onAutoScan((dir) => {
@@ -154,7 +158,14 @@ async function init() {
 
 /* ---------------- 事件 ---------------- */
 function bindEvents() {
-  $('#btnScanScope').addEventListener('click', openDiskModal);
+  $('#btnScanScope').addEventListener('click', () => {
+    if (state.busy) {
+      window.api.cancelScan();
+      $('#statusText').textContent = '正在停止…';
+      return;
+    }
+    openDiskModal();
+  });
   $('#btnQuickScan').addEventListener('click', quickScan);
   $('#btnPickFolder').addEventListener('click', pickFolder);
   $('#btnEmptyScan').addEventListener('click', quickScan);
@@ -222,6 +233,12 @@ function bindEvents() {
     if (e.target.matches('input[type="checkbox"]')) return;
     selectFile(row.dataset.id);
   });
+  list.addEventListener('dblclick', (e) => {
+    const row = e.target.closest('.file-row');
+    if (!row) return;
+    const f = state.files.find((x) => x.id === row.dataset.id);
+    if (f) window.api.openFile(f.path).catch((err) => toast(err.message, true));
+  });
   list.addEventListener('change', (e) => {
     if (!e.target.matches('input[type="checkbox"]')) return;
     const id = e.target.dataset.id;
@@ -240,11 +257,11 @@ function bindEvents() {
 
   $('#btnPreviewOpen').addEventListener('click', () => {
     const f = currentFile();
-    if (f) window.api.openFile(f.path);
+    if (f) window.api.openFile(f.path).catch((err) => toast(err.message, true));
   });
   $('#btnPreviewReveal').addEventListener('click', () => {
     const f = currentFile();
-    if (f) window.api.reveal(f.path);
+    if (f) window.api.reveal(f.path).catch((err) => toast(err.message, true));
   });
   $('#btnPreviewArchive').addEventListener('click', () => archiveCurrent());
   $('#btnAiSummary').addEventListener('click', () => runAi('summary'));
@@ -362,7 +379,11 @@ async function scanRoots(roots, label) {
     const scan = await window.api.scan({ roots });
     applyScan(scan);
     const s = scan.summary || {};
-    toast(`扫描完成：找到 ${s.files || 0} 个文件，用时 ${((scan.durationMs || 0) / 1000).toFixed(1)} 秒`);
+    if (s.cancelled) {
+      toast(`扫描已停止，已经找到 ${s.files || 0} 个文件`);
+    } else {
+      toast(`扫描完成：找到 ${s.files || 0} 个文件，用时 ${((scan.durationMs || 0) / 1000).toFixed(1)} 秒`);
+    }
     if (scan.truncated) toast('文件太多，达到上限了。可以在设置里调大「最大文件数」。', true);
   } catch (err) {
     toast(`扫描失败：${err.message}`, true);
@@ -427,23 +448,35 @@ function topTags(list, n) {
 function renderViewSummary() {
   const el = $('#viewSummary');
   const s = state.scan && state.scan.summary;
-  if (!s) {
-    el.innerHTML = '先选一个位置，点「扫描整个电脑」或「一键扫常用位置」';
-    return;
-  }
-
   const all = state.files;
 
   if (state.view === 'files') {
     const keep = all.filter((f) => f.category && (f.category.group === 'knowledge' || f.category.group === 'tool')).length;
     const clean = all.filter((f) => f.category && f.category.key === 'junk').length;
-    const groups = (s.duplicateStats && s.duplicateStats.groups) || 0;
-    el.innerHTML = `<div class="mini-stats">
-      <div class="mini-stat"><span class="ms-label">找到的文件</span><span class="ms-value">${all.length}</span><span class="ms-sub">${keep} 个建议留 · ${clean} 个可清理</span></div>
-      <div class="mini-stat"><span class="ms-label">占用空间</span><span class="ms-value">${fmtSize(s.size)}</span><span class="ms-sub">AI 产出合计</span></div>
-      <div class="mini-stat"><span class="ms-label">可以清理</span><span class="ms-value warn">${fmtSize(s.cleanableSize)}</span><span class="ms-sub">草稿 / 空洞 / 重复</span></div>
-      <div class="mini-stat"><span class="ms-label">重复可释放</span><span class="ms-value warn">${fmtSize(s.duplicateSize || 0)}</span><span class="ms-sub">${groups} 组重复</span></div>
+    const groups = (s && s.duplicateStats && s.duplicateStats.groups) || 0;
+    el.innerHTML = `<div class="overview-strip">
+      <div class="mini-stats">
+        <div class="mini-stat"><span class="ms-label">找到的文件</span><span class="ms-value">${
+          s ? all.length : 0
+        }</span><span class="ms-sub">${s ? `${keep} 个建议留 · ${clean} 个可清理` : '还没扫描'}</span></div>
+        <div class="mini-stat"><span class="ms-label">占用空间</span><span class="ms-value">${
+          s ? fmtSize(s.size) : '—'
+        }</span><span class="ms-sub">AI 产出合计</span></div>
+        <div class="mini-stat"><span class="ms-label">可以清理</span><span class="ms-value warn">${
+          s ? fmtSize(s.cleanableSize) : '—'
+        }</span><span class="ms-sub">草稿 / 空洞 / 重复</span></div>
+        <div class="mini-stat"><span class="ms-label">重复可释放</span><span class="ms-value warn">${
+          s ? fmtSize(s.duplicateSize || 0) : '—'
+        }</span><span class="ms-sub">${groups} 组重复</span></div>
+      </div>
+      <div class="mini-chart" id="miniChart"></div>
     </div>`;
+    renderMiniChart();
+    return;
+  }
+
+  if (!s) {
+    el.innerHTML = '先选一个位置，点「扫描整个电脑」或「一键扫常用位置」';
     return;
   }
 
@@ -481,8 +514,53 @@ function renderViewSummary() {
     const list = baseViewFiles();
     const free = list.reduce((n, f) => n + (f.size || 0), 0);
     const groups = (s.duplicateStats && s.duplicateStats.groups) || 0;
-    el.innerHTML = `发现 <b>${groups}</b> 组重复，共 <b>${list.length}</b> 个多余文件，处理掉能腾出 <span class="warn">${fmtSize(free)}</span>。`;
+    el.innerHTML = `发现 <b>${groups}</b> 组重复，共 <b>${list.length}</b> 个多余文件，处理掉能腾出 <span class="warn">${fmtSize(
+      free
+    )}</span>。`;
   }
+}
+
+function renderMiniChart() {
+  const box = document.getElementById('miniChart');
+  if (!box) return;
+  const s = state.scan && state.scan.summary;
+
+  if (!s || !s.bySource || !s.bySource.length) {
+    box.innerHTML = `<svg viewBox="0 0 60 60" width="56" height="56" class="mini-donut"><circle cx="30" cy="30" r="23" fill="none" stroke="#e6ebf5" stroke-width="10"/></svg>
+      <div class="mini-legend"><span class="mini-legend-empty">扫描后显示<br>AI 来源分布</span></div>`;
+    return;
+  }
+
+  const items = (s.bySource || []).slice(0, 4);
+  const total = items.reduce((n, x) => n + x.count, 0) || 1;
+  const R = 23;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+  const segs = items
+    .map((it) => {
+      const frac = it.count / total;
+      const dash = frac * C;
+      const seg = `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${it.color || '#94a3b8'}" stroke-width="10" stroke-dasharray="${dash.toFixed(
+        1
+      )} ${(C - dash).toFixed(1)}" stroke-dashoffset="${(-offset).toFixed(
+        1
+      )}" transform="rotate(-90 30 30)"/>`;
+      offset += dash;
+      return seg;
+    })
+    .join('');
+
+  const legend = items
+    .map(
+      (it) =>
+        `<span class="mini-legend-item"><span class="source-dot" style="background:${
+          it.color || '#94a3b8'
+        }"></span><span class="mini-legend-name">${esc(it.name)}</span><span class="mini-legend-val">${it.count}</span></span>`
+    )
+    .join('');
+
+  box.innerHTML = `<svg viewBox="0 0 60 60" width="56" height="56" class="mini-donut">${segs}<text x="30" y="33" text-anchor="middle" class="mini-donut-num">${total}</text></svg>
+    <div class="mini-legend">${legend}</div>`;
 }
 
 function setView(view) {
@@ -688,8 +766,8 @@ function updateSelectionUI() {
   const all = $('#selectAll');
   all.checked = n > 0 && n === total;
   all.indeterminate = n > 0 && n < total;
-  $('#btnArchive').textContent = n ? `归档选中 (${n})` : '归档选中';
-  $('#btnExport').textContent = n ? `导出选中 (${n})` : '导出清单';
+  $('#btnArchive').textContent = n ? `归档 (${n})` : '归档';
+  $('#btnExport').textContent = n ? `导出 (${n})` : '导出';
 }
 
 /* ---------------- 预览 ---------------- */
@@ -878,7 +956,8 @@ function removeFromState(doneList, rerender = true) {
 }
 
 async function doExport() {
-  if (!state.files.length) return toast('还没有扫描结果', true);
+  // 没有扫描结果时，点导出应提示先扫描
+  if (!state.files.length) return toast('先扫描一次再导出', true);
   const paths = selectedPaths();
   const list = paths.length ? state.files.filter((f) => state.selection.has(f.id)) : state.filtered;
   if (!list.length) return toast('当前没有可导出的文件', true);
