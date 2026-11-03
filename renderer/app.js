@@ -679,11 +679,14 @@ function rowCells(f) {
   </div>`;
 
   if (state.view === 'knowledge') {
-    const tags = (cat.tags || []).slice(0, 2);
+    // 只放主标签：两个标签在窄列里总有一个被截成「数…」，反而不好读
+    const tags = (cat.tags || []).slice(0, 1);
     return {
       name: nameCell,
       c3: tags.length
-        ? tags.map((t) => `<span class="tag-chip" title="${esc(t)}">${esc(t)}</span>`).join('')
+        ? `<span class="tag-row">${tags
+            .map((t) => `<span class="tag-chip" title="${esc(t)}">${esc(t)}</span>`)
+            .join('')}</span>`
         : '<span class="cell-text">—</span>',
       c4: `<span class="cell-num">${(f.chars || 0).toLocaleString()} 字</span>`
     };
