@@ -138,4 +138,35 @@ async function removeDuplicates(files, options) {
   return result;
 }
 
-module.exports = { archive, removeDuplicates, dirForCategory, GROUP_DIRS };
+/**
+ * 把任意文件移到软件回收站（用于「一键整理」清理冗余，不限于重复文件）。
+ */
+async function moveToTrash(files, trashDir) {
+  const result = { ok: 0, failed: [], skipped: [], done: [] };
+  if (!trashDir) throw new Error('回收站目录不能为空');
+
+  for (const file of files) {
+    try {
+      await fsp.mkdir(trashDir, { recursive: true });
+      const target = await uniqueTarget(trashDir, file.name);
+      try {
+        await fsp.rename(file.path, target);
+      } catch (err) {
+        if (err.code === 'EXDEV') {
+          await fsp.copyFile(file.path, target);
+          await fsp.unlink(file.path);
+        } else {
+          throw err;
+        }
+      }
+      result.ok += 1;
+      result.done.push({ path: file.path, target });
+    } catch (err) {
+      result.failed.push({ path: file.path, error: err.code || err.message });
+    }
+  }
+
+  return result;
+}
+
+module.exports = { archive, removeDuplicates, moveToTrash, dirForCategory, GROUP_DIRS };
