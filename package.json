@@ -1,0 +1,58 @@
+{
+  "name": "ai-artifact-manager",
+  "productName": "AI工件管家",
+  "version": "0.1.0",
+  "description": "专门管理 AI 生成文件的本地工具：扫描识别、自动分类、重复清理、本地 AI 接入、内置 MCP",
+  "main": "main.js",
+  "author": "智维工作室 Zhiwei Studio",
+  "license": "MIT",
+  "homepage": "https://www.zhiweistudio.com.cn",
+  "keywords": [
+    "ai",
+    "artifacts",
+    "file-manager",
+    "mcp",
+    "electron"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win portable nsis"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.zhiweistudio.aiartifactmanager",
+    "productName": "AI工件管家",
+    "copyright": "Copyright © 2026 智维工作室 Zhiwei Studio",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json",
+      "README.md",
+      "LICENSE"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "AI工件管家-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "AI工件管家-${version}-setup.${ext}"
+    }
+  }
+}
