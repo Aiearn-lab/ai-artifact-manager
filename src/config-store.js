@@ -1,0 +1,107 @@
+'use strict';
+
+const fs = require('fs');
+const fsp = fs.promises;
+const path = require('path');
+
+const DEFAULTS = {
+  archiveRoot: '',
+  archiveMode: 'move',
+  whitelist: [], // [{ type:'path'|'ext', value:'...' }]
+  includeExt: [],
+  excludeExt: [],
+  maxDepth: 14,
+  maxFiles: 50000,
+  ai: {
+    provider: '', // ollama | lmstudio | openai-compatible
+    baseUrl: '',
+    apiKey: '',
+    model: ''
+  },
+  mcp: {
+    enabled: false
+  },
+  ui: {
+    theme: 'light'
+  },
+  pro: {
+    activated: false,
+    code: ''
+  }
+};
+
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function deepMerge(base, patch) {
+  const out = Array.isArray(base) ? base.slice() : { ...base };
+  for (const [k, v] of Object.entries(patch || {})) {
+    if (isPlainObject(v) && isPlainObject(out[k])) out[k] = deepMerge(out[k], v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+class ConfigStore {
+  constructor(userDataDir) {
+    this.dir = userDataDir;
+    this.file = path.join(userDataDir, 'config.json');
+    this.data = JSON.parse(JSON.stringify(DEFAULTS));
+  }
+
+  async load() {
+    try {
+      await fsp.mkdir(this.dir, { recursive: true });
+      const raw = await fsp.readFile(this.file, 'utf8');
+      const parsed = JSON.parse(raw);
+      this.data = deepMerge(this.data, parsed && typeof parsed === 'object' ? parsed : {});
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        // 配置损坏时不让程序起不来：备份坏文件后用默认值
+        try {
+          await fsp.rename(this.file, `${this.file}.broken-${Date.now()}`);
+        } catch {
+          /* ignore */
+        }
+      }
+      this.data = JSON.parse(JSON.stringify(DEFAULTS));
+    }
+    return this.data;
+  }
+
+  get() {
+    return this.data;
+  }
+
+  async save() {
+    await fsp.mkdir(this.dir, { recursive: true });
+    const tmp = `${this.file}.tmp`;
+    await fsp.writeFile(tmp, JSON.stringify(this.data, null, 2), 'utf8');
+    await fsp.rename(tmp, this.file);
+    return this.data;
+  }
+
+  async patch(partial) {
+    this.data = deepMerge(this.data, partial || {});
+    await this.save();
+    return this.data;
+  }
+
+  /** 返回给渲染进程的配置：密钥打码，避免明文出现在界面/日志 */
+  safe() {
+    const copy = JSON.parse(JSON.stringify(this.data));
+    if (copy.ai && copy.ai.apiKey) {
+      copy.ai.hasKey = true;
+      copy.ai.apiKeyMasked = copy.ai.apiKey.length > 8
+        ? `${copy.ai.apiKey.slice(0, 4)}****${copy.ai.apiKey.slice(-4)}`
+        : '****';
+      delete copy.ai.apiKey;
+    } else if (copy.ai) {
+      copy.ai.hasKey = false;
+    }
+    return copy;
+  }
+}
+
+module.exports = { ConfigStore, DEFAULTS };
