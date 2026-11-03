@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, safeStorage } = require('electron');
 const path = require('path');
 const fsp = require('fs').promises;
 const crypto = require('crypto');
@@ -29,6 +29,35 @@ let scanAbort = false;
 /** portable 版启动时 process.execPath 指向临时解压目录，必须拿真实 exe 路径 */
 function appExePath() {
   return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+}
+
+/** API 密钥用系统密钥库（Windows DPAPI）加密后落盘，明文只在内存里出现 */
+function encryptSecret(plain) {
+  if (!plain) return '';
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return `enc:${safeStorage.encryptString(String(plain)).toString('base64')}`;
+    }
+  } catch {
+    /* 系统密钥库不可用时退回明文 */
+  }
+  return String(plain);
+}
+
+function decryptSecret(stored) {
+  if (!stored) return '';
+  const s = String(stored);
+  if (!s.startsWith('enc:')) return s;
+  try {
+    return safeStorage.decryptString(Buffer.from(s.slice(4), 'base64'));
+  } catch {
+    return '';
+  }
+}
+
+function aiConfigPlain() {
+  const ai = configStore.get().ai;
+  return { ...ai, apiKey: decryptSecret(ai.apiKey) };
 }
 
 // portable 版：配置放在 exe 同目录，跟着 U 盘/文件夹走（目录不可写时回退默认）
@@ -275,10 +304,22 @@ function registerIpc() {
     return r.canceled ? null : r.filePath;
   });
 
-  ipcMain.handle('config:get', () => ({
-    ...configStore.safe(),
-    app: { name: APP_NAME, version: VERSION, homepage: 'https://www.zhiweistudio.com.cn' }
-  }));
+  ipcMain.handle('config:get', () => {
+    const safe = configStore.safe();
+    const plain = decryptSecret(configStore.get().ai.apiKey);
+    if (safe.ai) {
+      safe.ai.hasKey = !!plain;
+      safe.ai.apiKeyMasked = plain
+        ? plain.length > 8
+          ? `${plain.slice(0, 4)}****${plain.slice(-4)}`
+          : '****'
+        : '';
+    }
+    return {
+      ...safe,
+      app: { name: APP_NAME, version: VERSION, homepage: 'https://www.zhiweistudio.com.cn' }
+    };
+  });
 
   ipcMain.handle('config:patch', async (e, patch) => {
     await configStore.patch(patch || {});
@@ -570,17 +611,15 @@ function registerIpc() {
   ipcMain.handle('ai:save', async (e, cfg) => {
     const cur = configStore.get().ai;
     const next = { ...cur, ...(cfg || {}) };
-    if (cfg && Object.prototype.hasOwnProperty.call(cfg, 'apiKey') && cfg.apiKey === undefined) {
-      next.apiKey = cur.apiKey;
+    if (cfg && Object.prototype.hasOwnProperty.call(cfg, 'apiKey') && cfg.apiKey !== undefined) {
+      next.apiKey = cfg.apiKey ? encryptSecret(cfg.apiKey) : '';
     }
     await configStore.patch({ ai: next });
     return configStore.safe().ai;
   });
 
   ipcMain.handle('ai:test', async (e, override) => {
-    const cur = configStore.get().ai;
-    const cfg = { ...cur, ...(override || {}) };
-    if (!cfg.apiKey) cfg.apiKey = cur.apiKey;
+    const cfg = { ...aiConfigPlain(), ...(override || {}) };
     const r = await ai.chat(cfg, [{ role: 'user', content: '只回复 OK 两个字母' }], {
       maxTokens: 12,
       timeoutMs: 20000,
@@ -592,7 +631,7 @@ function registerIpc() {
   ipcMain.handle('ai:summarize', async (e, payload) => {
     const f = findFile(payload && payload.path);
     if (!f) throw new Error('文件不在本次扫描结果里');
-    const summary = await ai.summarize(configStore.get().ai, f);
+    const summary = await ai.summarize(aiConfigPlain(), f);
     f.aiSummary = summary;
     await writeIndex();
     return { path: f.path, summary };
@@ -601,21 +640,21 @@ function registerIpc() {
   ipcMain.handle('ai:rename', async (e, payload) => {
     const f = findFile(payload && payload.path);
     if (!f) throw new Error('文件不在本次扫描结果里');
-    const name = await ai.suggestName(configStore.get().ai, f);
+    const name = await ai.suggestName(aiConfigPlain(), f);
     return { path: f.path, name };
   });
 
   ipcMain.handle('ai:tags', async (e, payload) => {
     const f = findFile(payload && payload.path);
     if (!f) throw new Error('文件不在本次扫描结果里');
-    const tags = await ai.suggestTags(configStore.get().ai, f);
+    const tags = await ai.suggestTags(aiConfigPlain(), f);
     return { path: f.path, tags };
   });
 
   ipcMain.handle('ai:category', async (e, payload) => {
     const f = findFile(payload && payload.path);
     if (!f) throw new Error('文件不在本次扫描结果里');
-    const key = await ai.suggestCategory(configStore.get().ai, f);
+    const key = await ai.suggestCategory(aiConfigPlain(), f);
     return { path: f.path, category: key };
   });
 
@@ -623,7 +662,7 @@ function registerIpc() {
     const a = findFile(payload && payload.a);
     const b = findFile(payload && payload.b);
     if (!a || !b) throw new Error('两个文件都要在扫描结果里');
-    return ai.compareVersions(configStore.get().ai, a, b);
+    return ai.compareVersions(aiConfigPlain(), a, b);
   });
 
   // ---------- MCP ----------
@@ -776,6 +815,16 @@ async function init() {
 
   configStore = new ConfigStore(app.getPath('userData'));
   await configStore.load();
+
+  // 旧版本明文存的密钥，启动时自动加密迁移（迁移失败不阻断启动）
+  const aiCfg = configStore.get().ai;
+  if (aiCfg && aiCfg.apiKey && !String(aiCfg.apiKey).startsWith('enc:') && safeStorage.isEncryptionAvailable()) {
+    try {
+      await configStore.patch({ ai: { apiKey: encryptSecret(aiCfg.apiKey) } });
+    } catch {
+      /* ignore */
+    }
+  }
 
   registerIpc();
   createWindow();
