@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('api', {
   exportRun: (payload) => ipcRenderer.invoke('export:run', payload),
   renameFile: (payload) => ipcRenderer.invoke('file:rename', payload),
   openTrash: () => ipcRenderer.invoke('trash:open'),
+  trashList: () => ipcRenderer.invoke('trash:list'),
+  trashRestore: (payload) => ipcRenderer.invoke('trash:restore', payload),
 
   aiDetectLocal: () => ipcRenderer.invoke('ai:detectLocal'),
   aiSave: (cfg) => ipcRenderer.invoke('ai:save', cfg),
