@@ -25,7 +25,11 @@ const SKIP_DIRS = new Set([
   'Windows', 'WinSxS', 'Program Files', 'Program Files (x86)', 'ProgramData',
   'AppData', 'Application Data', '.cache', '.npm', '.vscode', '.idea',
   'dist', 'build', 'out', 'target', '__pycache__', '.next', '.nuxt', 'vendor',
-  '.venv', 'venv', 'env', '.conda', 'site-packages', 'Library', 'System'
+  '.venv', 'venv', 'env', '.conda', 'site-packages', 'Library', 'System',
+  // 常见 AI 工具自己的缓存/数据目录：里面是程序运行产物，不是用户的文件，扫进来只会淹没真正的资料
+  '.accio', '.coze', 'coze', '.octop-browser', '.qoder', '.qoder-cn', '.codebuddy',
+  '.sheetagent', '.claude', '.cursor', '.agents', '.agent-browser', '.agentmail',
+  '.lark-cli', '.workbuddy'
 ]);
 // Windows 路径不区分大小写，比较时统一转小写
 const SKIP_DIRS_LOWER = new Set(Array.from(SKIP_DIRS).map((s) => s.toLowerCase()));
