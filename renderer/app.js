@@ -260,24 +260,16 @@ function bindEvents() {
   });
   $('#btnOpenTrashFolder').addEventListener('click', async () => {
     try {
-      const dir = await window.api.openTrash();
-      toast(`已打开回收站文件夹：${dir}`);
+      await window.api.openTrash();
     } catch (err) {
       toast(`打开失败：${err.message}`, true);
     }
   });
-  $('#trashList').addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-restore]');
-    if (!btn) return;
-    btn.disabled = true;
-    try {
-      const r = await window.api.trashRestore({ dir: btn.dataset.dir, trashedPath: btn.dataset.trashed });
-      toast(`已放回原位置：${r.path}`);
-      await renderTrash();
-    } catch (err) {
-      toast(`放回失败：${err.message}`, true);
-      btn.disabled = false;
-    }
+  $('#btnClearTrashLog').addEventListener('click', async () => {
+    if (!window.confirm('只是清掉这份「清理记录」，回收站里的文件不会动。确定吗？')) return;
+    await window.api.trashClearLog();
+    await renderTrash();
+    toast('记录已清空，文件还在系统回收站里');
   });
 
   $('#btnPreviewOpen').addEventListener('click', () => {
@@ -948,7 +940,7 @@ async function doOneClickOrganize() {
   const ok = window.confirm(
     `管家准备这样做：\n\n` +
       `① 把 ${keepList.length} 个「值得留的知识 / 能用的工具」移动到：\n${root}\n\n` +
-      `② 把 ${trashList.length} 个「完全相同 / 可以删的」移到回收站（之后能一键放回）：\n${sample}${more}` +
+      `② 把 ${trashList.length} 个「完全相同 / 可以删的」删掉（进 Windows 回收站，能还原）：\n${sample}${more}` +
       similarNote +
       `\n\n确定就点「确定」，不确定就点「取消」。`
   );
@@ -971,9 +963,16 @@ async function doOneClickOrganize() {
       const r = await window.api.cleanupTrash({ paths: trashList.map((f) => f.path) });
       trashed = r.ok;
       if (r.done) removeFromState(r.done, false);
+      const stuck = (r.failed || []).length;
+      if (stuck) {
+        toast(
+          `有 ${stuck} 个删不掉——U 盘、网络盘、移动硬盘通常没有回收站，管家不敢硬删，已给你留着。`,
+          true
+        );
+      }
     }
     renderAll();
-    toast(`整理完成：${archived} 个归档，${trashed} 个移到回收站。想找回点「回收站」。`);
+    toast(`整理完成：${archived} 个归档，${trashed} 个进了系统回收站。想找回就打开回收站还原。`);
   } catch (err) {
     toast(`整理失败：${err.message}`, true);
   } finally {
@@ -1042,14 +1041,22 @@ async function doCleanDuplicates() {
     : '';
   const ok = window.confirm(
     `发现 ${exact.length} 个内容完全相同的文件，可释放约 ${fmtSize(size)}。\n\n` +
-      `会把多余的移到回收站（能一键放回），每组保留一份。${similarNote}\n\n确定吗？`
+      `会把多余的删掉（进 Windows 回收站，能在回收站里还原），每组保留一份。${similarNote}\n\n确定吗？`
   );
   if (!ok) return;
 
   try {
     const r = await window.api.removeDuplicates({ paths: exact.map((f) => f.path), toTrash: true });
     removeFromState(r.done || exact.map((f) => ({ path: f.path })));
-    toast(`已移入回收站 ${r.ok} 个，释放约 ${fmtSize(size)}。点「回收站」可以放回。`);
+    const stuck = (r.failed || []).length;
+    if (stuck) {
+      toast(
+        `删了 ${r.ok} 个，释放约 ${fmtSize(size)}。另外 ${stuck} 个没删成（U 盘/网络盘一般没有回收站，管家不硬删）。`,
+        true
+      );
+    } else {
+      toast(`已删 ${r.ok} 个，释放约 ${fmtSize(size)}。都进了 Windows 回收站，能还原。`);
+    }
   } catch (err) {
     toast(`清理失败：${err.message}`, true);
   }
@@ -1066,23 +1073,22 @@ async function renderTrash() {
   try {
     const batches = await window.api.trashList();
     if (!batches.length) {
-      box.innerHTML = '<div class="trash-empty">回收站是空的</div>';
+      box.innerHTML =
+        '<div class="trash-empty">还没有清理过东西。<br /><span class="muted-sm">管家删掉的都会进 Windows 回收站，不会真删。</span></div>';
       return;
     }
     box.innerHTML = batches
       .map(
         (b) => `<div class="trash-batch">
-          <div class="trash-batch-head"><span>${fmtTime(b.createdAt)} 移入</span><span>${b.files.length} 个文件</span></div>
+          <div class="trash-batch-head"><span>${fmtTime(b.at)} 清理</span><span>${b.files.length} 个文件</span></div>
           ${b.files
             .map(
               (f) => `<div class="trash-item">
                 <div class="ti-main">
                   <div class="ti-name" title="${esc(f.name)}">${esc(f.name)}</div>
-                  <div class="ti-path" title="${esc(f.originalPath)}">原位置：${esc(f.originalPath)}</div>
+                  <div class="ti-path" title="${esc(f.path)}">原来在：${esc(f.path)}</div>
                 </div>
-                <button class="btn btn-ghost btn-sm" data-restore="1" data-dir="${esc(b.dir)}" data-trashed="${esc(
-                f.trashedPath
-              )}">放回去</button>
+                <span class="ti-size">${fmtSize(f.size || 0)}</span>
               </div>`
             )
             .join('')}
