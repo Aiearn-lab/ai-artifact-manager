@@ -1,7 +1,7 @@
 {
   "name": "ai-artifact-manager",
   "productName": "AI产出管家",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "专门管理 AI 产出文件的本地工具：扫描磁盘、自动分类、知识库与工具库、重复清理、本地 AI 接入、内置 MCP",
   "main": "main.js",
   "author": "智维工作室 Zhiwei Studio",
@@ -44,15 +44,25 @@
     ],
     "win": {
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "AI产出管家-${version}-portable.${ext}"
+      "artifactName": "AI产出管家-${version}-portable.${ext}",
+      "executableName": "ai-artifact-manager"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "artifactName": "AI产出管家-${version}-setup.${ext}"
+    },
+    "afterPack": "scripts/afterPack.js",
+    "portable": {
+      "artifactName": "AI产出管家-${version}-portable.${ext}"
     }
   }
 }
