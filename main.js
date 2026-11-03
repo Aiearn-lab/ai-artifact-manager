@@ -15,7 +15,7 @@ const { ConfigStore } = require('./src/config-store');
 const { createMcpHttpServer } = require('./src/mcp-http');
 const { safeFileName } = require('./src/safe-path');
 
-const APP_NAME = 'AI工件管家';
+const APP_NAME = 'AI产出管家';
 const VERSION = require('./package.json').version;
 
 let mainWindow = null;
@@ -32,7 +32,7 @@ function appExePath() {
 // portable 版：配置放在 exe 同目录，跟着 U 盘/文件夹走（目录不可写时回退默认）
 if (process.env.PORTABLE_EXECUTABLE_DIR) {
   try {
-    app.setPath('userData', path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'AI工件管家数据'));
+    app.setPath('userData', path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'AI产出管家数据'));
   } catch {
     /* 只读目录就退回默认 AppData */
   }
@@ -69,6 +69,7 @@ function toPublic(scan) {
   if (!scan) return null;
   return {
     root: scan.root,
+    roots: scan.roots || [scan.root],
     scannedAt: scan.scannedAt,
     durationMs: scan.durationMs,
     truncated: scan.truncated,
@@ -207,6 +208,37 @@ function registerIpc() {
     homepage: 'https://www.zhiweistudio.com.cn'
   }));
 
+  ipcMain.handle('disks:list', async () => {
+    const out = [];
+    for (let c = 67; c <= 90; c += 1) {
+      const letter = String.fromCharCode(c);
+      const root = `${letter}:\\`;
+      try {
+        await fsp.access(root);
+        let total = 0;
+        let free = 0;
+        try {
+          const st = await fsp.statfs(root);
+          total = Number(st.bsize) * Number(st.blocks);
+          free = Number(st.bsize) * Number(st.bavail);
+        } catch {
+          /* 取不到容量就只显示盘符 */
+        }
+        out.push({ letter, root, total, free });
+      } catch {
+        /* 盘符不存在 */
+      }
+    }
+    return out;
+  });
+
+  ipcMain.handle('app:paths', () => ({
+    desktop: app.getPath('desktop'),
+    downloads: app.getPath('downloads'),
+    documents: app.getPath('documents'),
+    home: app.getPath('home')
+  }));
+
   ipcMain.handle('dialog:pickFolder', async () => {
     const r = await dialog.showOpenDialog(mainWindow, {
       title: '选择要扫描的文件夹',
@@ -237,8 +269,8 @@ function registerIpc() {
 
   ipcMain.handle('scan:start', async (e, payload) => {
     const p = payload || {};
-    const root = p.root;
-    if (!root) throw new Error('请先选择要扫描的文件夹');
+    const roots = (Array.isArray(p.roots) && p.roots.length ? p.roots : [p.root]).filter(Boolean);
+    if (!roots.length) throw new Error('请先选择要扫描的位置');
 
     const cfg = configStore.get();
     sendProgress('scanning', 0, 0);
@@ -247,32 +279,57 @@ function registerIpc() {
     const whitelist = (Array.isArray(p.whitelist) ? p.whitelist : cfg.whitelist || []).slice();
     if (cfg.archiveRoot) whitelist.push({ type: 'path', value: cfg.archiveRoot });
 
-    const result = await scanner.scan(root, {
-      whitelist,
-      maxDepth: p.maxDepth || cfg.maxDepth,
-      maxFiles: p.maxFiles || cfg.maxFiles,
-      includeExt: Array.isArray(p.includeExt) ? p.includeExt : cfg.includeExt,
-      excludeExt: Array.isArray(p.excludeExt) ? p.excludeExt : cfg.excludeExt
-    });
+    const merged = [];
+    const errors = [];
+    let truncated = false;
+    let durationMs = 0;
+    let scannedAt = Date.now();
 
-    sendProgress('classifying', result.files.length, result.files.length);
-    classifier.classifyAll(result.files);
+    for (const root of roots) {
+      const r = await scanner.scan(root, {
+        whitelist,
+        maxDepth: p.maxDepth || cfg.maxDepth,
+        maxFiles: p.maxFiles || cfg.maxFiles,
+        includeExt: Array.isArray(p.includeExt) ? p.includeExt : cfg.includeExt,
+        excludeExt: Array.isArray(p.excludeExt) ? p.excludeExt : cfg.excludeExt
+      });
+      merged.push(...r.files);
+      errors.push(...r.errors);
+      truncated = truncated || r.truncated;
+      durationMs += r.durationMs;
+      scannedAt = r.scannedAt || scannedAt;
+    }
 
-    sendProgress('deduping', 0, result.files.length);
+    // 多根之间可能有重叠（比如同时选了桌面和用户目录），按路径去重
+    const seen = new Set();
+    const files = [];
+    for (const f of merged) {
+      const key = path.resolve(f.path).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      files.push(f);
+    }
+    files.sort((a, b) => b.mtime - a.mtime);
+    for (let i = 0; i < files.length; i += 1) files[i].id = `f${i}`;
+
+    sendProgress('classifying', files.length, files.length);
+    classifier.classifyAll(files);
+
+    sendProgress('deduping', 0, files.length);
     let dupe = { groups: [], stats: { groups: 0, exactFiles: 0, similarFiles: 0, freeableSize: 0 } };
     try {
-      dupe = await dedupe.detect(result.files);
+      dupe = await dedupe.detect(files);
     } catch (err) {
       dupe.stats.error = err.message;
     }
 
-    for (const f of result.files) {
+    for (const f of files) {
       if (f.duplicate && f.duplicate.isDuplicate) {
         f.category = classifier.applyDuplicate(f, f.duplicate);
       }
     }
 
-    const summary = classifier.summarize(result.files);
+    const summary = classifier.summarize(files);
     summary.duplicateStats = dupe.stats;
     summary.groups = dupe.groups.map((g) => ({
       kind: g.kind,
@@ -284,18 +341,19 @@ function registerIpc() {
     }));
 
     lastScan = {
-      root: result.root,
-      scannedAt: result.scannedAt,
-      durationMs: result.durationMs,
-      truncated: result.truncated,
-      files: result.files,
-      errors: result.errors,
+      root: roots.join('  +  '),
+      roots,
+      scannedAt,
+      durationMs,
+      truncated,
+      files,
+      errors,
       summary
     };
 
     await writeIndex();
     await saveLastScan();
-    sendProgress('done', result.files.length, result.files.length);
+    sendProgress('done', files.length, files.length);
     return toPublic(lastScan);
   });
 
@@ -412,6 +470,14 @@ function registerIpc() {
     return archiver.removeDuplicates(files, { toTrash: p.toTrash !== false, trashDir });
   });
 
+  ipcMain.handle('cleanup:trash', async (e, payload) => {
+    const p = payload || {};
+    const files = pickFiles(p.paths);
+    if (!files.length) return { ok: 0, failed: [], skipped: [], done: [] };
+    const trashDir = path.join(app.getPath('userData'), 'trash', String(Date.now()));
+    return archiver.moveToTrash(files, trashDir);
+  });
+
   ipcMain.handle('export:run', async (e, payload) => {
     const p = payload || {};
     if (!lastScan) throw new Error('还没有扫描结果');
@@ -521,7 +587,7 @@ function registerIpc() {
 
   ipcMain.handle('contextmenu:install', async () => {
     const key = 'HKCU\\Software\\Classes\\Directory\\shell\\AIArtifactManager';
-    await runReg(['add', key, '/ve', '/d', '用 AI工件管家 扫描', '/f']);
+    await runReg(['add', key, '/ve', '/d', '用 AI产出管家 扫描', '/f']);
     await runReg(['add', key, '/v', 'Icon', '/d', `${appExePath()},0`, '/f']);
     await runReg(['add', `${key}\\command`, '/ve', '/d', `${exeCommand()} --scan "%1"`, '/f']);
     return { installed: true };
@@ -597,6 +663,17 @@ function createWindow() {
             await mainWindow.webContents.executeJavaScript(
               "document.querySelector('#btnSettings').click(); document.querySelector('#settingsTabs button[data-tab=\"ai\"]').click(); true"
             );
+            await new Promise((r) => setTimeout(r, 600));
+          } else if (action === 'disks') {
+            await mainWindow.webContents.executeJavaScript("document.querySelector('#btnScanScope').click(); true");
+            await new Promise((r) => setTimeout(r, 900));
+          } else if (action === 'knowledge' || action === 'tools' || action === 'duplicates') {
+            await mainWindow.webContents.executeJavaScript(
+              `document.querySelector('.nav-tab[data-view="${action}"]').click(); true`
+            );
+            await new Promise((r) => setTimeout(r, 600));
+          } else if (action === 'stats') {
+            await mainWindow.webContents.executeJavaScript("document.querySelector('#btnStats').click(); true");
             await new Promise((r) => setTimeout(r, 600));
           }
           const img = await mainWindow.capturePage();
