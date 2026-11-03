@@ -15,6 +15,16 @@
 
 ---
 
+## 直接下载用
+
+**[⬇ 下载 AI产出管家 0.3.0（Windows 64 位，95 MB）](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.3.0-portable.exe)**
+
+双击就能跑，不用安装、不用注册。配置和数据都放在 exe 旁边的「AI产出管家数据」文件夹，整个文件夹拷走就能换电脑接着用。
+
+不想下载也可以自己打包，见文末「安装与运行」。
+
+---
+
 ## 你是不是也有这个问题
 
 用 ChatGPT、Claude、DeepSeek、Cursor 这些工具干活，几个月后文件夹会变成这样：
@@ -142,7 +152,7 @@ HTTP 配置（Cursor）：
 
 ### 方式一：下载直接运行
 
-到 Releases 下载 `AI产出管家-x.x.x-portable.exe`，双击即用，不用装 Node、不用装 Python。
+到 [Releases](https://github.com/Aiearn-lab/ai-artifact-manager/releases) 下载 `AI-Artifact-Manager-x.x.x-portable.exe`，双击即用，不用装 Node、不用装 Python。
 
 ### 方式二：源码运行
 
