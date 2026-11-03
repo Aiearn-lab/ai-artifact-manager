@@ -4,8 +4,9 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const archiver = require('./archiver');
+const { sourceLabel } = require('./source-label');
 
-const SERVER_INFO = { name: 'ai-artifact-manager', version: '0.1.0' };
+const SERVER_INFO = { name: 'ai-artifact-manager', version: require('../package.json').version };
 const PROTOCOL_VERSION = '2024-11-05';
 
 function textResult(text) {
@@ -42,7 +43,7 @@ function matchFile(f, q) {
     (f.category && f.category.label) || '',
     (f.category && f.category.reason) || '',
     (f.category && Array.isArray(f.category.tags) ? f.category.tags.join(' ') : ''),
-    (f.source && f.source.name) || ''
+    sourceLabel(f.source)
   ]
     .join(' ')
     .toLowerCase();
@@ -54,7 +55,7 @@ function describe(f) {
   lines.push(`文件：${f.name}`);
   lines.push(`路径：${f.path}`);
   lines.push(`大小：${fmtSize(f.size)}${f.chars ? ` · 约 ${f.chars} 字` : ''}`);
-  lines.push(`AI 来源：${(f.source && f.source.name) || '未识别'}`);
+  lines.push(`AI 来源：${sourceLabel(f.source)}`);
   lines.push(`分类：${(f.category && f.category.label) || '未分类'}`);
   lines.push(`留存建议：${(f.category && f.category.retention) || '-'}`);
   if (f.category && f.category.reason) lines.push(`说明：${f.category.reason}`);
