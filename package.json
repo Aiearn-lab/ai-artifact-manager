@@ -1,7 +1,7 @@
 {
   "name": "ai-artifact-manager",
   "productName": "AI产出管家",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "专门管理 AI 产出文件的本地工具：扫描磁盘、自动分类、知识库与工具库、重复清理、本地 AI 接入、内置 MCP",
   "main": "main.js",
   "author": "智维工作室 Zhiwei Studio",
