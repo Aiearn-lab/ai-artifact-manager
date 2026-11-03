@@ -271,7 +271,7 @@ function bindEvents() {
     if (!btn) return;
     btn.disabled = true;
     try {
-      const r = await window.api.trashRestore({ batch: btn.dataset.batch, trashedPath: btn.dataset.trashed });
+      const r = await window.api.trashRestore({ dir: btn.dataset.dir, trashedPath: btn.dataset.trashed });
       toast(`已放回原位置：${r.path}`);
       await renderTrash();
     } catch (err) {
@@ -1080,7 +1080,7 @@ async function renderTrash() {
                   <div class="ti-name" title="${esc(f.name)}">${esc(f.name)}</div>
                   <div class="ti-path" title="${esc(f.originalPath)}">原位置：${esc(f.originalPath)}</div>
                 </div>
-                <button class="btn btn-ghost btn-sm" data-restore="1" data-batch="${esc(b.id)}" data-trashed="${esc(
+                <button class="btn btn-ghost btn-sm" data-restore="1" data-dir="${esc(b.dir)}" data-trashed="${esc(
                 f.trashedPath
               )}">放回去</button>
               </div>`
