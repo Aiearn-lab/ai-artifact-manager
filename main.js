@@ -951,7 +951,12 @@ function createWindow() {
                 kw
               )}; i.dispatchEvent(new Event('input')); } return true; })()`
             );
-            await new Promise((r) => setTimeout(r, 2600));
+            await new Promise((r) => setTimeout(r, 2400));
+            // 顺手点开第一个结果，展示「打开就跳到命中位置」
+            await mainWindow.webContents.executeJavaScript(
+              "document.querySelector('.file-row') && document.querySelector('.file-row').click(); true"
+            );
+            await new Promise((r) => setTimeout(r, 1400));
           }
           const apiOk = await mainWindow.webContents.executeJavaScript(
             '!!window.api && typeof window.api.scan === "function" && typeof window.api.trashList === "function"'
