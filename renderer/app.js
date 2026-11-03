@@ -159,6 +159,15 @@ async function init() {
     if (!dir) return;
     scanRoots([dir], '指定文件夹');
   });
+
+  // 初始化完成，启动画面淡出（.out 有 320ms 过渡，之后再移除节点）
+  const splash = $('#splash');
+  if (splash) {
+    setTimeout(() => {
+      splash.classList.add('out');
+      setTimeout(() => splash.remove(), 380);
+    }, 260);
+  }
 }
 
 /* ---------------- 事件 ---------------- */
@@ -216,6 +225,11 @@ function bindEvents() {
     } catch {
       /* 存不下就下次再说，不影响用 */
     }
+  });
+  $('#btnProActivate').addEventListener('click', doProActivate);
+  $('#settingsHomepage').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.api.openUrl('https://www.zhiweistudio.com.cn');
   });
   $('#sourceFilter').addEventListener('change', (e) => {
     state.filter.source = e.target.value;
@@ -1502,9 +1516,43 @@ async function testAi() {
 }
 
 /* ---------------- 设置 ---------------- */
+/** 刷新 Pro 激活状态那一行文字和按钮 */
+function refreshProStatus() {
+  const el = $('#proStatus');
+  const btn = $('#btnProActivate');
+  if (!el) return;
+  const pro = (state.config && state.config.pro) || {};
+  if (pro.activated) {
+    el.textContent = `已激活${pro.code ? `（${pro.code}）` : ''}。Pro 功能会随版本更新逐步开放。`;
+    el.style.color = '#059669';
+    if (btn) btn.textContent = '换一个码';
+  } else {
+    el.textContent = '还没激活。核心功能不受影响，Pro 只是多几个省事的功能。';
+    el.style.color = '';
+    if (btn) btn.textContent = '激活';
+  }
+}
+
+async function doProActivate() {
+  const input = $('#proCode');
+  const code = ((input && input.value) || '').trim();
+  if (!code) return toast('先把激活码填进去', true);
+  try {
+    const r = await window.api.proActivate(code);
+    if (!r || !r.ok) return toast((r && r.error) || '激活失败', true);
+    state.config = await window.api.configGet();
+    if (input) input.value = '';
+    refreshProStatus();
+    toast('激活成功，谢谢支持');
+  } catch (err) {
+    toast(`激活失败：${err.message}`, true);
+  }
+}
+
 async function openSettings() {
   const c = state.config || (await window.api.configGet());
   state.config = c;
+  refreshProStatus();
 
   $('#setArchiveRoot').value = c.archiveRoot || '';
   $('#setArchiveMode').value = c.archiveMode || 'move';
