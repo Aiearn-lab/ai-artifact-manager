@@ -5,7 +5,7 @@ const path = require('path');
 const fsSync = require('fs');
 const fsp = fsSync.promises;
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 
 const scanner = require('./src/scanner');
 const classifier = require('./src/classifier');
@@ -135,54 +135,85 @@ function pickFiles(paths) {
   return (lastScan ? lastScan.files : []).filter((f) => set.has(path.resolve(f.path)));
 }
 
-/** 回收站按「源文件所在盘」存放：删 E 盘大文件不会先复制到 C 盘塞满系统盘 */
-function trashDirForFile(filePath) {
-  const drive = path.parse(path.resolve(filePath)).root || 'C:\\';
-  return path.join(drive, '.AI产出管家回收站');
-}
-
-/** 所有可能存在的回收站根目录（含旧版 userData/trash，兼容历史记录） */
-function trashRoots() {
-  const roots = [path.join(app.getPath('userData'), 'trash')];
-  for (let c = 67; c <= 90; c += 1) {
-    const drive = `${String.fromCharCode(c)}:\\`;
-    const p = path.join(drive, '.AI产出管家回收站');
+/**
+ * 系统回收站是否被组策略禁用。
+ * 禁用时 Windows 会把「删除」当成永久删除，那样就没有后悔药了，
+ * 所以这种情况管家直接拒绝执行，绝不自己造一个删除路径。
+ */
+let recycleDisabledCache = null;
+function recycleBinDisabled() {
+  if (recycleDisabledCache !== null) return recycleDisabledCache;
+  recycleDisabledCache = false;
+  const keys = [
+    'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer',
+    'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer'
+  ];
+  for (const key of keys) {
     try {
-      if (fsSync.existsSync(p)) roots.push(p);
+      const out = execFileSync('reg', ['query', key, '/v', 'NoRecycleFiles'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+      if (/NoRecycleFiles\s+REG_DWORD\s+0x1/i.test(out)) {
+        recycleDisabledCache = true;
+        break;
+      }
     } catch {
-      /* 盘不存在 */
+      /* 键不存在 = 没有禁用 */
     }
   }
-  return roots;
+  return recycleDisabledCache;
 }
 
-/** 把一批文件按盘分组移入回收站，返回合并结果 */
+/** 清理记录：只记「我删过什么、原来在哪」，方便用户回头找，不存文件本体 */
+function trashLogPath() {
+  return path.join(app.getPath('userData'), 'trash-log.json');
+}
+
+async function appendTrashLog(items) {
+  const file = trashLogPath();
+  let log = [];
+  try {
+    const raw = await fsp.readFile(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) log = parsed;
+  } catch {
+    log = [];
+  }
+  log.unshift({
+    at: Date.now(),
+    files: items.map((i) => ({ path: i.path, name: i.name, size: i.size || 0 }))
+  });
+  try {
+    await fsp.writeFile(file, JSON.stringify(log.slice(0, 30), null, 2), 'utf8');
+  } catch {
+    /* 记录写不进去不影响文件已经进了回收站 */
+  }
+}
+
+/**
+ * 把一批文件送进 Windows 系统回收站——和用户自己右键删除完全一样。
+ * 用户能在系统回收站里右键「还原」，也能自己清空，管家不另建任何文件夹。
+ */
 async function trashFiles(files) {
-  const merged = { ok: 0, failed: [], skipped: [], done: [] };
-  const groups = new Map();
-  for (const f of files) {
-    const base = trashDirForFile(f.path);
-    if (!groups.has(base)) groups.set(base, []);
-    groups.get(base).push(f);
+  if (recycleBinDisabled()) {
+    throw new Error(
+      '这台电脑被设置成了「删除时不进回收站」，删掉就真找不回来了。为了安全，管家不做这个操作。'
+    );
   }
-
-  for (const [base, list] of groups) {
-    const stamp = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
-    let dir = path.join(base, stamp);
+  const result = { ok: 0, failed: [], skipped: [], done: [], mode: 'system' };
+  for (const file of files) {
     try {
-      await fsp.mkdir(dir, { recursive: true });
-    } catch {
-      // 盘根不可写时退回 userData
-      dir = path.join(app.getPath('userData'), 'trash', stamp);
+      await shell.trashItem(file.path);
+      result.ok += 1;
+      result.done.push({ path: file.path, name: file.name, size: file.size || 0 });
+    } catch (err) {
+      result.failed.push({ path: file.path, error: err.code || err.message });
     }
-    const r = await archiver.moveToTrash(list, dir);
-    merged.ok += r.ok;
-    merged.failed.push(...r.failed);
-    merged.skipped.push(...r.skipped);
-    merged.done.push(...r.done);
   }
-
-  return merged;
+  if (result.done.length) await appendTrashLog(result.done);
+  return result;
 }
 
 /** 预览/打开/定位只允许操作本次扫描结果里的文件，防止渲染进程传任意路径 */
@@ -573,50 +604,30 @@ function registerIpc() {
     return { ok: true, tags };
   });
 
+  // 打开 Windows 自己的回收站，还原/清空都在系统里做，管家不插手
   ipcMain.handle('trash:open', async () => {
-    const dir = path.join(app.getPath('userData'), 'trash');
-    await fsp.mkdir(dir, { recursive: true });
-    await shell.openPath(dir);
-    return dir;
+    const msg = await shell.openPath('shell:RecycleBinFolder');
+    if (msg) throw new Error(`打不开回收站：${msg}`);
+    return true;
   });
 
   ipcMain.handle('trash:list', async () => {
-    const batches = [];
-    for (const root of trashRoots()) {
-      let dirs = [];
-      try {
-        dirs = await fsp.readdir(root, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-      for (const d of dirs) {
-        if (!d.isDirectory()) continue;
-        const dir = path.join(root, d.name);
-        try {
-          const m = JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'));
-          batches.push({
-            dir,
-            createdAt: m.createdAt || Number(String(d.name).split('-')[0]) || 0,
-            files: (m.files || []).filter((f) => !f.restoredAt)
-          });
-        } catch {
-          /* 没有 manifest 的旧批次跳过，文件仍在文件夹里可取回 */
-        }
-      }
+    try {
+      const raw = await fsp.readFile(trashLogPath(), 'utf8');
+      const log = JSON.parse(raw);
+      return Array.isArray(log) ? log : [];
+    } catch {
+      return [];
     }
-    return batches.filter((b) => b.files.length).sort((a, b) => b.createdAt - a.createdAt);
   });
 
-  ipcMain.handle('trash:restore', async (e, payload) => {
-    const dir = String((payload && payload.dir) || '');
-    const trashedPath = String((payload && payload.trashedPath) || '');
-    if (!dir || !trashedPath) throw new Error('参数不完整');
-
-    const resolved = path.resolve(dir);
-    const allowed = trashRoots().map((r) => path.resolve(r));
-    if (!allowed.some((r) => resolved.startsWith(r + path.sep))) throw new Error('非法批次');
-
-    return archiver.restoreFromTrash(resolved, trashedPath);
+  ipcMain.handle('trash:clearLog', async () => {
+    try {
+      await fsp.unlink(trashLogPath());
+    } catch {
+      /* 没有就算了 */
+    }
+    return true;
   });
 
   ipcMain.handle('archive:run', async (e, payload) => {
@@ -842,9 +853,12 @@ function createWindow() {
           } else if (action === 'stats') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnStats').click(); true");
             await new Promise((r) => setTimeout(r, 600));
+          } else if (action === 'trash') {
+            await mainWindow.webContents.executeJavaScript("document.querySelector('#btnOpenTrash').click(); true");
+            await new Promise((r) => setTimeout(r, 800));
           }
           const apiOk = await mainWindow.webContents.executeJavaScript(
-            '!!window.api && typeof window.api.scan === "function" && typeof window.api.trashRestore === "function"'
+            '!!window.api && typeof window.api.scan === "function" && typeof window.api.trashList === "function"'
           );
           console.log('[shot] window.api available:', apiOk);
           const img = await mainWindow.capturePage();
