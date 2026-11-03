@@ -220,6 +220,8 @@ async function detect(files, options) {
         }
       }
     }
+    // 这一组比完就释放分片缓存，避免上万文件时内存一直涨
+    for (const f of list) shingleCache.delete(f.id);
   }
 
   const simGroups = new Map();
