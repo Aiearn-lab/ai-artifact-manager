@@ -83,7 +83,7 @@
             <button id="btnArchive" class="btn btn-ghost btn-sm" type="button">归档</button>
             <button id="btnExport" class="btn btn-ghost btn-sm" type="button">导出</button>
             <button id="btnCleanDup" class="btn btn-ghost btn-sm btn-danger-ghost" type="button">清理重复</button>
-            <button id="btnOpenTrash" class="btn btn-ghost btn-sm" type="button">回收站</button>
+            <button id="btnOpenTrash" class="btn btn-ghost btn-sm" type="button">清理记录</button>
           </div>
         </div>
 
@@ -165,7 +165,7 @@
       <span class="status-right">
         <a href="#" id="linkHomepage">智维工作室 · zhiweistudio.com.cn</a>
         <span class="dot">·</span>
-        <span id="statusVersion">v0.2.0</span>
+        <span id="statusVersion">v0.3.0</span>
       </span>
     </footer>
 
@@ -258,7 +258,7 @@
               <input id="setArchiveRoot" type="text" placeholder="例如 D:\AI产出归档">
               <button id="btnPickArchiveRoot" class="btn btn-ghost btn-sm" type="button">选择</button>
             </div>
-            <p class="hint">「一键整理」会把该留的知识和工具挪到这里，按分类建文件夹。默认是剪切，整理完原位置不再保留。</p>
+            <p class="hint">「一键整理」会把该留的知识和工具挪到这里，按分类建文件夹。默认是剪切，整理完原位置不再保留。删掉的东西会进 Windows 回收站，随时能在系统回收站里还原。</p>
           </div>
 
           <div class="field">
@@ -459,16 +459,21 @@
     </div>
   </div>
 
-  <!-- 回收站 -->
+  <!-- 清理记录 -->
   <div class="modal-mask hidden" id="trashModal">
     <div class="modal">
       <header class="modal-head">
-        <h2>回收站</h2>
+        <h2>清理记录</h2>
         <button class="icon-btn" id="btnCloseTrash" type="button" title="关闭">×</button>
       </header>
+      <div class="trash-note">
+        管家删掉的文件，全部进了 <b>Windows 回收站</b>，没有真删。<br />
+        想找回：打开回收站，找到文件右键点「还原」，就回到原来的位置。
+      </div>
       <div class="trash-body" id="trashList"></div>
       <div class="trash-foot">
-        <button id="btnOpenTrashFolder" class="btn btn-ghost btn-sm" type="button">打开回收站文件夹</button>
+        <button id="btnOpenTrashFolder" class="btn btn-primary btn-sm" type="button">打开 Windows 回收站</button>
+        <button id="btnClearTrashLog" class="btn btn-ghost btn-sm" type="button">清空这份记录</button>
       </div>
     </div>
   </div>
