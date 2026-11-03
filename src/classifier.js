@@ -8,7 +8,7 @@ const {
   ONETIME_HINTS
 } = require('./scanner');
 
-const KNOWLEDGE_EXT = new Set(['.md', '.markdown', '.rst', '.txt', '.log']);
+const KNOWLEDGE_EXT = new Set(['.md', '.markdown', '.rst', '.txt']);
 const CONFIG_EXT = new Set(['.json', '.jsonc', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.env']);
 
 const THEME_WORDS = [
@@ -138,7 +138,12 @@ function classify(file) {
     return tool(false, `一次性脚本：${why}，换个场景大概率要重写`, tags, oneoffScore >= 4 ? 'high' : 'medium');
   }
 
-  // 4) 知识库沉淀
+  // 4) 日志：程序自动生成的输出，会越积越多。再长也不是「知识」，别让它们淹没知识库
+  if (ext === '.log') {
+    return junk('程序自动生成的日志，越积越多，清理掉不影响任何功能', tags, 'medium');
+  }
+
+  // 5) 知识库沉淀
   if (KNOWLEDGE_EXT.has(ext)) {
     const hasHeading = /^#{1,6}\s+\S/m.test(head);
     const nameHint = KNOWLEDGE_NAME_HINTS.test(name);
@@ -157,7 +162,7 @@ function classify(file) {
     return knowledge('有一定信息量的文本，建议先留存观察', tags, 'low');
   }
 
-  // 5) 配置/数据文件
+  // 6) 配置/数据文件
   if (CONFIG_EXT.has(ext)) {
     return {
       key: 'other',
