@@ -74,6 +74,10 @@ window.I18N = {
     'list.noPreview': '点左边任意一个文件',
     'list.noPreviewHint': '内容会显示在这里，不用另外打开软件',
 
+    /* 来源只分两类 */
+    'src.aiTool': 'AI 工具',
+    'src.unknown': '未识别',
+
     /* 分类 */
     'cat.knowledge': '知识库沉淀',
     'cat.toolCommon': '常用工具',
@@ -190,7 +194,7 @@ window.I18N = {
     'disk.unknown': '容量未知',
     'disk.scanThis': '扫这个盘',
     'chart.afterScan': '扫描后显示',
-    'chart.sourceDist': 'AI 来源分布',
+    'chart.sourceDist': 'AI 产出分布',
     'chart.noData': '没有数据',
     'chart.files': '份文件',
     'prog.scanningAt': '正在扫描{where}…',
@@ -238,7 +242,7 @@ window.I18N = {
     'stats.title': '统计',
     'stats.noteFiles': 'AI 产出的文本文件',
     'stats.noteSize': '合计大小',
-    'stats.bySource': 'AI 来源占比',
+    'stats.bySource': 'AI 产出占比',
     'stats.byCategory': '分类占比',
     'stats.byCount': '按文件数',
     'common.cancel': '取消',
@@ -314,6 +318,9 @@ window.I18N = {
     'list.tooMany': '{n} files in total — showing the first {max} to stay responsive. Narrow it down with search or filters.',
     'list.noPreview': 'Click any file on the left',
     'list.noPreviewHint': 'Its content shows up here — no need to open another app',
+
+    'src.aiTool': 'AI tool',
+    'src.unknown': 'Unknown',
 
     'cat.knowledge': 'Knowledge',
     'cat.toolCommon': 'Reusable script',
@@ -423,7 +430,7 @@ window.I18N = {
     'disk.unknown': 'Size unknown',
     'disk.scanThis': 'Scan this drive',
     'chart.afterScan': 'Shown after a scan',
-    'chart.sourceDist': 'AI source breakdown',
+    'chart.sourceDist': 'AI output breakdown',
     'chart.noData': 'No data',
     'chart.files': 'files',
     'prog.scanningAt': 'Scanning {where}…',
@@ -471,7 +478,7 @@ window.I18N = {
     'stats.title': 'Stats',
     'stats.noteFiles': 'Text files produced by AI',
     'stats.noteSize': 'Combined size',
-    'stats.bySource': 'By AI source',
+    'stats.bySource': 'AI output share',
     'stats.byCategory': 'By category',
     'stats.byCount': 'files',
     'common.cancel': 'Cancel',
