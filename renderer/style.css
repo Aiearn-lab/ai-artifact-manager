@@ -350,6 +350,24 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
   font-weight: 600;
 }
 .hit-count { color: #a8b1c1; font-size: 10.5px; }
+
+/* 首次使用引导条：只在没看过的时候出现，点一次就记住 */
+.onboard {
+  margin: 0 0 10px;
+  padding: 10px 13px;
+  border: 1px solid #d6e4fb;
+  background: linear-gradient(180deg, #f4f9ff, #eef5ff);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.onboard.hidden { display: none; }
+.onboard .ob-steps { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-width: 0; }
+.onboard .ob-title { font-size: 12.5px; font-weight: 600; color: #1d4ed8; }
+.onboard .ob-step { font-size: 12px; color: #35507d; }
+.onboard .ob-step b { color: #1d4ed8; margin-right: 2px; }
+.onboard button { flex: 0 0 auto; }
 .fext {
   flex: 0 0 auto;
   font-size: 9.5px;
