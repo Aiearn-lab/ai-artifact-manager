@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
 
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   pickSave: (options) => ipcRenderer.invoke('dialog:pickSave', options),
+  listDisks: () => ipcRenderer.invoke('disks:list'),
+  appPaths: () => ipcRenderer.invoke('app:paths'),
 
   configGet: () => ipcRenderer.invoke('config:get'),
   configPatch: (patch) => ipcRenderer.invoke('config:patch', patch),
@@ -20,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
 
   archive: (payload) => ipcRenderer.invoke('archive:run', payload),
   removeDuplicates: (payload) => ipcRenderer.invoke('duplicate:remove', payload),
+  cleanupTrash: (payload) => ipcRenderer.invoke('cleanup:trash', payload),
   exportRun: (payload) => ipcRenderer.invoke('export:run', payload),
   renameFile: (payload) => ipcRenderer.invoke('file:rename', payload),
   openTrash: () => ipcRenderer.invoke('trash:open'),
