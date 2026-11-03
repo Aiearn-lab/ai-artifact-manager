@@ -8,6 +8,7 @@
     <img alt="no cloud" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p>免费开源 · 不用额外买 API · 文件不出本机</p>
+  <p><b>中文</b> · <a href="README.en.md">English</a></p>
 </div>
 
 > **智维工作室 / Zhiwei Studio** 出品 · 官网 [www.zhiweistudio.com.cn](https://www.zhiweistudio.com.cn)
@@ -17,7 +18,7 @@
 
 ## 直接下载用
 
-**[⬇ 下载 AI产出管家 0.5.0（Windows 64 位，95 MB）](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.5.0-portable.exe)**
+**[⬇ 下载 AI产出管家 0.5.1（Windows 64 位，95 MB）](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.5.1-portable.exe)**
 
 双击就能跑，不用安装、不用注册。配置和数据都放在 exe 旁边的「AI产出管家数据」文件夹，整个文件夹拷走就能换电脑接着用。
 
