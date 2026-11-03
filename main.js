@@ -224,6 +224,26 @@ function assertKnownFile(filePath) {
 }
 
 /**
+ * Pro 激活码：离线校验，不联网、不绑设备。
+ * 格式 ZW-XXXX-XXXX-序号，前两段由密钥和序号算出来，改一位就对不上。
+ * 用 scripts/make-pro-code.js 生成（同一个密钥）。
+ */
+const PRO_SECRET = 'zhiwei-studio-pro-2026';
+
+function proCodeFor(seq) {
+  const h = crypto.createHmac('sha256', PRO_SECRET).update(String(seq)).digest('hex').toUpperCase();
+  return `ZW-${h.slice(0, 4)}-${h.slice(4, 8)}-${seq}`;
+}
+
+function verifyProCode(input) {
+  const m = /^ZW-([0-9A-F]{4})-([0-9A-F]{4})-(\d{1,6})$/i.exec(String(input || '').trim().toUpperCase());
+  if (!m) return null;
+  const expect = proCodeFor(m[3]);
+  if (expect !== `ZW-${m[1]}-${m[2]}-${m[3]}`) return null;
+  return { seq: Number(m[3]) };
+}
+
+/**
  * 全文搜索：按需读文件开头一段，带内存缓存。
  * 「只记得内容不记得文件名」是这个工具最该解决的问题，
  * 所以搜索必须能钻进正文，不能只比文件名。
@@ -563,6 +583,19 @@ function registerIpc() {
   ipcMain.handle('scan:cancel', () => {
     scanAbort = true;
     return true;
+  });
+
+  // Pro 激活：校验通过就写进本地配置，全程不联网
+  ipcMain.handle('pro:activate', async (e, code) => {
+    const hit = verifyProCode(code);
+    if (!hit) return { ok: false, error: '激活码对不上，检查一下是不是复制少了字符' };
+    await configStore.patch({ pro: { activated: true, code: String(code).trim().toUpperCase() } });
+    return { ok: true, seq: hit.seq };
+  });
+
+  ipcMain.handle('pro:deactivate', async () => {
+    await configStore.patch({ pro: { activated: false, code: '' } });
+    return { ok: true };
   });
 
   // 全文搜索：只搜文本类文件，最多跑 12 秒，没搜完也先返回已找到的
@@ -930,6 +963,11 @@ function createWindow() {
               "document.querySelector('#btnSettings').click(); document.querySelector('#settingsTabs button[data-tab=\"ai\"]').click(); true"
             );
             await new Promise((r) => setTimeout(r, 600));
+          } else if (action === 'pro') {
+            await mainWindow.webContents.executeJavaScript(
+              "document.querySelector('#btnSettings').click(); document.querySelector('#settingsTabs button[data-tab=\"pro\"]').click(); true"
+            );
+            await new Promise((r) => setTimeout(r, 700));
           } else if (action === 'disks') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnScanScope').click(); true");
             await new Promise((r) => setTimeout(r, 900));
