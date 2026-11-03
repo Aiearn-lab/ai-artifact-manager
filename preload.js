@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   configPatch: (patch) => ipcRenderer.invoke('config:patch', patch),
 
   scan: (payload) => ipcRenderer.invoke('scan:start', payload),
+  cancelScan: () => ipcRenderer.invoke('scan:cancel'),
   lastScan: () => ipcRenderer.invoke('scan:last'),
 
   preview: (filePath) => ipcRenderer.invoke('file:preview', filePath),
