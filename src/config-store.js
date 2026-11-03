@@ -35,7 +35,6 @@ function builtinWhitelist() {
 
 const DEFAULTS = {
   archiveRoot: '',
-  archiveMode: 'move',
   whitelist: builtinWhitelist(), // [{ type:'path'|'ext', value:'...' }]
   includeExt: [],
   excludeExt: [],
