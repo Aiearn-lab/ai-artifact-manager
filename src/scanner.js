@@ -27,6 +27,8 @@ const SKIP_DIRS = new Set([
   'dist', 'build', 'out', 'target', '__pycache__', '.next', '.nuxt', 'vendor',
   '.venv', 'venv', 'env', '.conda', 'site-packages', 'Library', 'System'
 ]);
+// Windows 路径不区分大小写，比较时统一转小写
+const SKIP_DIRS_LOWER = new Set(Array.from(SKIP_DIRS).map((s) => s.toLowerCase()));
 
 // 默认跳过的扩展名：二进制/媒体/压缩包，扫了也没法预览和比对
 const SKIP_EXT = new Set([
@@ -183,6 +185,8 @@ async function collectFiles(root, options) {
   const whitelist = Array.isArray(opts.whitelist) ? opts.whitelist : [];
   const includeExt = new Set((opts.includeExt || []).map((e) => String(e).toLowerCase()));
   const excludeExt = new Set((opts.excludeExt || []).map((e) => String(e).toLowerCase()));
+  const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+  const shouldStop = typeof opts.shouldStop === 'function' ? opts.shouldStop : null;
 
   const normalizedRoot = path.resolve(root);
   const wlPaths = whitelist
@@ -195,8 +199,14 @@ async function collectFiles(root, options) {
   const files = [];
   const errors = [];
   let truncated = false;
+  let cancelled = false;
 
   async function walk(dir, depth) {
+    if (cancelled) return;
+    if (shouldStop && shouldStop()) {
+      cancelled = true;
+      return;
+    }
     if (files.length >= maxFiles) {
       truncated = true;
       return;
@@ -212,6 +222,10 @@ async function collectFiles(root, options) {
     }
 
     for (const entry of entries) {
+      if (cancelled || (shouldStop && shouldStop())) {
+        cancelled = true;
+        return;
+      }
       if (files.length >= maxFiles) {
         truncated = true;
         return;
@@ -222,7 +236,7 @@ async function collectFiles(root, options) {
       if (entry.isSymbolicLink()) continue;
 
       if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name)) continue;
+        if (SKIP_DIRS_LOWER.has(entry.name.toLowerCase())) continue;
         if (wlPaths.some((p) => lower === p || lower.startsWith(p + path.sep))) continue;
         await walk(full, depth + 1);
         continue;
@@ -253,11 +267,14 @@ async function collectFiles(root, options) {
         mtime: stat.mtimeMs,
         depth: depth + 1
       });
+
+      if (onProgress && files.length % 200 === 0) onProgress(files.length);
     }
   }
 
   await walk(normalizedRoot, 0);
-  return { files, errors, truncated };
+  if (onProgress) onProgress(files.length);
+  return { files, errors, truncated, cancelled };
 }
 
 /**
@@ -373,7 +390,7 @@ function detectSource(name, head, ext) {
  */
 async function scan(root, options) {
   const startedAt = Date.now();
-  const { files: rawFiles, errors, truncated } = await collectFiles(root, options || {});
+  const { files: rawFiles, errors, truncated, cancelled } = await collectFiles(root, options || {});
 
   const files = [];
   const concurrency = 12;
@@ -422,6 +439,7 @@ async function scan(root, options) {
     }),
     errors,
     truncated,
+    cancelled: !!cancelled,
     totals: {
       files: files.length,
       size: totalSize,
