@@ -488,6 +488,46 @@ function registerIpc() {
     return dir;
   });
 
+  ipcMain.handle('trash:list', async () => {
+    const root = path.join(app.getPath('userData'), 'trash');
+    let dirs = [];
+    try {
+      dirs = await fsp.readdir(root, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    const batches = [];
+    for (const d of dirs) {
+      if (!d.isDirectory()) continue;
+      const dir = path.join(root, d.name);
+      try {
+        const m = JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8'));
+        batches.push({
+          id: d.name,
+          createdAt: m.createdAt || Number(d.name) || 0,
+          files: (m.files || []).filter((f) => !f.restoredAt)
+        });
+      } catch {
+        /* 没有 manifest 的旧批次跳过，文件仍在文件夹里可取回 */
+      }
+    }
+    return batches.filter((b) => b.files.length).sort((a, b) => b.createdAt - a.createdAt);
+  });
+
+  ipcMain.handle('trash:restore', async (e, payload) => {
+    const p = payload || {};
+    const batchId = String(p.batch || '');
+    const trashedPath = String(p.trashedPath || '');
+    if (!batchId || !trashedPath) throw new Error('参数不完整');
+
+    const root = path.resolve(path.join(app.getPath('userData'), 'trash'));
+    const dir = path.resolve(path.join(root, batchId));
+    // 防目录穿越：批次目录必须在回收站根目录下
+    if (!dir.startsWith(root + path.sep)) throw new Error('非法批次');
+
+    return archiver.restoreFromTrash(dir, trashedPath);
+  });
+
   ipcMain.handle('archive:run', async (e, payload) => {
     const p = payload || {};
     const files = pickFiles(p.paths);
@@ -657,7 +697,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       spellcheck: false
     }
   });
@@ -711,6 +751,10 @@ function createWindow() {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnStats').click(); true");
             await new Promise((r) => setTimeout(r, 600));
           }
+          const apiOk = await mainWindow.webContents.executeJavaScript(
+            '!!window.api && typeof window.api.scan === "function" && typeof window.api.trashRestore === "function"'
+          );
+          console.log('[shot] window.api available:', apiOk);
           const img = await mainWindow.capturePage();
           await fsp.writeFile(process.env.AI_AM_SHOT, img.toPNG());
         } catch {
