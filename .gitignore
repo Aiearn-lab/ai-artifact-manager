@@ -1,0 +1,8 @@
+node_modules/
+dist/
+_testdata/
+_test/
+AI工件管家数据/
+*.log
+.DS_Store
+Thumbs.db
