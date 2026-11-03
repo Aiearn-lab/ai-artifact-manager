@@ -718,7 +718,7 @@ function renderMiniChart() {
     return;
   }
 
-  const items = (s.bySource || []).slice(0, 4);
+  const items = aiSourceBuckets(s.bySource);
   const total = items.reduce((n, x) => n + x.count, 0) || 1;
   const R = 23;
   const C = 2 * Math.PI * R;
@@ -742,7 +742,7 @@ function renderMiniChart() {
       (it) =>
         `<span class="mini-legend-item"><span class="source-dot" style="background:${
           it.color || '#94a3b8'
-        }"></span><span class="mini-legend-name">${esc(it.name)}</span><span class="mini-legend-val">${it.count}</span></span>`
+        }"></span><span class="mini-legend-name">${esc(it.label)}</span><span class="mini-legend-val">${it.count}</span></span>`
     )
     .join('');
 
@@ -787,14 +787,14 @@ function renderSourceFilter() {
     sel.innerHTML = `<option value="all">${t('tb.allSources')}</option>`;
     return;
   }
-  const opts = [`<option value="all">${t('tb.allSources')}</option>`];
-  for (const src of s.bySource || []) {
-    opts.push(`<option value="${esc(src.id)}">${esc(src.name)} (${src.count})</option>`);
-  }
+  const aiCount = (s.bySource || []).filter((x) => x.id !== 'unknown').reduce((n2, x) => n2 + x.count, 0);
+  const unkCount = (s.bySource || []).filter((x) => x.id === 'unknown').reduce((n2, x) => n2 + x.count, 0);
+  const opts = [
+    `<option value="all">${t('tb.allSources')}</option>`,
+    `<option value="ai">${t('src.aiTool')} (${aiCount})</option>`,
+    `<option value="unknown">${t('src.unknown')} (${unkCount})</option>`
+  ];
   sel.innerHTML = opts.join('');
-  if (state.filter.source !== 'all' && !(s.bySource || []).some((x) => x.id === state.filter.source)) {
-    state.filter.source = 'all';
-  }
   sel.value = state.filter.source;
 }
 
@@ -810,7 +810,8 @@ function computeFiltered() {
     list = list.filter((f) => catMatch(f, state.filter.cat));
   }
   if (state.filter.source !== 'all') {
-    list = list.filter((f) => f.source && f.source.id === state.filter.source);
+    const wantUnknown = state.filter.source === 'unknown';
+    list = list.filter((f) => isUnknownSource(f) === wantUnknown);
   }
   if (state.filter.q) {
     const needle = state.filter.q.toLowerCase();
@@ -893,14 +894,34 @@ const CAT_KEY = {
   other: 'cat.other'
 };
 
-// 英文界面里只有「豆包」需要换成官方英文名，其他 AI 名字本来就是英文
-const SOURCE_EN = { doubao: 'Doubao' };
+/**
+ * 来源只对外说两件事：这是 AI 产出的，还是看不出来。
+ * 具体是哪家 AI 靠规则猜的，猜错比不猜更伤用户信任，所以不往外摆。
+ * （后端仍然算出了具体来源，要恢复细分只改这一个函数即可。）
+ */
+function isUnknownSource(f) {
+  const src = f.source || {};
+  return !src.id || src.id === 'unknown';
+}
 
 function sourceName(f) {
-  const src = f.source || {};
-  if (!src.id || src.id === 'unknown') return LANG === 'zh' ? '未识别' : 'Unknown';
-  if (LANG !== 'zh' && SOURCE_EN[src.id]) return SOURCE_EN[src.id];
-  return src.name || (LANG === 'zh' ? '未识别' : 'Unknown');
+  return isUnknownSource(f) ? t('src.unknown') : t('src.aiTool');
+}
+
+const SRC_COLORS = { ai: '#6366f1', unknown: '#cbd5e1' };
+
+/** 把后端算出的具体来源压成两类，坐标轴/图例只认这两个 */
+function aiSourceBuckets(bySource) {
+  let ai = 0;
+  let unk = 0;
+  for (const x of bySource || []) {
+    if (x.id === 'unknown' || !x.id) unk += x.count;
+    else ai += x.count;
+  }
+  return [
+    { id: 'ai', label: t('src.aiTool'), color: SRC_COLORS.ai, count: ai },
+    { id: 'unknown', label: t('src.unknown'), color: SRC_COLORS.unknown, count: unk }
+  ].filter((x) => x.count > 0);
 }
 
 function catLabel(f) {
@@ -992,9 +1013,9 @@ function rowCells(f) {
   // files
   return {
     name: nameCell,
-    c3: `<div class="source-badge"><span class="source-dot" style="background:${esc(
-      (f.source && f.source.color) || '#94a3b8'
-    )}"></span><span class="source-name">${esc(sourceName(f))}</span></div>`,
+    c3: `<div class="source-badge"><span class="source-dot" style="background:${
+      isUnknownSource(f) ? SRC_COLORS.unknown : SRC_COLORS.ai
+    }"></span><span class="source-name">${esc(sourceName(f))}</span></div>`,
     c4: `<span class="cat-badge cat-${esc(cat.key)}">${esc(catLabel(f))}</span>`
   };
 }
@@ -1969,16 +1990,11 @@ function renderCharts() {
     return;
   }
 
-  const sources = (s.bySource || []).slice(0, 6);
+  const sources = aiSourceBuckets(s.bySource);
   const total = sources.reduce((n, x) => n + x.count, 0) || 1;
-  const srcLabel = (x) => {
-    if (LANG === 'zh') return x.name;
-    if (x.id === 'unknown') return 'Unknown';
-    return SOURCE_EN[x.id] || x.name;
-  };
   renderDonut(
     sourceEl,
-    sources.map((x) => ({ label: srcLabel(x), value: x.count, color: x.color || '#94a3b8' })),
+    sources.map((x) => ({ label: x.label, value: x.count, color: x.color })),
     total
   );
 
