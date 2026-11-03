@@ -11,3 +11,6 @@ AI工件管家数据/
 *.log
 .DS_Store
 Thumbs.db
+
+# 激活码是内部资产，绝不能进公开仓库
+docs/Pro激活码*
