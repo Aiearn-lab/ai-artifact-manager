@@ -106,7 +106,6 @@ async function archive(files, archiveRoot, options) {
  */
 async function removeDuplicates(files, options) {
   const opts = options || {};
-  const toTrash = opts.toTrash !== false;
   const result = { ok: 0, failed: [], skipped: [], done: [] };
 
   const picked = [];
@@ -123,8 +122,11 @@ async function removeDuplicates(files, options) {
   }
   if (!picked.length) return result;
 
-  // 默认一律走回收站（带 manifest，可恢复）
-  if (toTrash && opts.trashDir) {
+  // 必须走可恢复的删除。宁可报错，也不做「直接 unlink」这种没有后悔药的事。
+  if (!opts.trashDir) {
+    throw new Error('删除必须指定回收站目录，拒绝直接永久删除');
+  }
+  {
     const r = await moveToTrash(picked, opts.trashDir);
     return {
       ok: r.ok,
@@ -133,18 +135,6 @@ async function removeDuplicates(files, options) {
       done: r.done
     };
   }
-
-  for (const file of picked) {
-    try {
-      await fsp.unlink(file.path);
-      result.ok += 1;
-      result.done.push({ path: file.path, target: null });
-    } catch (err) {
-      result.failed.push({ path: file.path, error: err.code || err.message });
-    }
-  }
-
-  return result;
 }
 
 /**
