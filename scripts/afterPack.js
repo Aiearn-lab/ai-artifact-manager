@@ -39,16 +39,28 @@ exports.default = async function afterPack(context) {
   const exe = path.join(appOutDir, exeName);
   const before = fs.statSync(exe).size;
 
-  execFileSync(rcedit, [
-    exe,
-    '--set-icon', icon,
-    '--set-file-version', '0.3.0.0',
-    '--set-product-version', '0.3.0.0',
+  // rcedit 的可执行文件路径和参数都不能带中文（会报 Unable to load file）。
+  // 解决：把 rcedit 复制到临时目录（纯英文路径）来调，参数只传相对项目根的路径。
+  const os = require('os');
+  const rceditTmp = path.join(os.tmpdir(), 'aiam-rcedit.exe');
+  try {
+    fs.copyFileSync(rcedit, rceditTmp);
+  } catch (e) {
+    throw new Error(`复制 rcedit 到临时目录失败：${e.message}`);
+  }
+  const exeRel = path.relative(root, exe);
+  const iconRel = path.relative(root, icon);
+
+  execFileSync(rceditTmp, [
+    exeRel,
+    '--set-icon', iconRel,
+    '--set-file-version', '0.4.0.0',
+    '--set-product-version', '0.4.0.0',
     '--set-version-string', 'ProductName', 'AI产出管家',
     '--set-version-string', 'FileDescription', 'AI产出管家 - 专门管理 AI 生成的文件',
     '--set-version-string', 'CompanyName', '智维工作室 Zhiwei Studio',
     '--set-version-string', 'LegalCopyright', 'Copyright © 2026 智维工作室'
-  ], { stdio: 'ignore' });
+  ], { cwd: root, stdio: 'pipe' });
 
   const after = fs.statSync(exe).size;
   // 资源替换会让文件略微变小或变大，但绝不该出现数量级缩水
