@@ -4,10 +4,39 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
+function builtinWhitelist() {
+  const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+  const pf = process.env.ProgramFiles || 'C:\\Program Files';
+  const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const pd = process.env.ProgramData || 'C:\\ProgramData';
+  const up = process.env.USERPROFILE || '';
+
+  const paths = [sysRoot, pf, pf86, pd, 'C:\\$Recycle.Bin', 'C:\\System Volume Information', 'C:\\Recovery', 'C:\\PerfLogs'];
+  if (up) {
+    paths.push(`${up}\\AppData`, `${up}\\Application Data`, `${up}\\Local Settings`, `${up}\\Cookies`);
+  }
+
+  // 这些类型基本不可能是 AI 产出的「有用文本」，扫进来只会拖慢速度
+  const exts = [
+    '.exe', '.dll', '.sys', '.msi', '.bin', '.dat', '.db', '.sqlite', '.sqlite3',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.tif', '.tiff',
+    '.mp3', '.wav', '.flac', '.aac', '.mp4', '.mov', '.mkv', '.avi', '.wmv',
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.iso',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.pyc', '.pyo', '.class', '.o', '.obj', '.so', '.dylib', '.lib',
+    '.ttf', '.otf', '.woff', '.woff2', '.eot'
+  ];
+
+  return [
+    ...paths.filter(Boolean).map((v) => ({ type: 'path', value: v, builtin: true })),
+    ...exts.map((v) => ({ type: 'ext', value: v, builtin: true }))
+  ];
+}
+
 const DEFAULTS = {
   archiveRoot: '',
   archiveMode: 'move',
-  whitelist: [], // [{ type:'path'|'ext', value:'...' }]
+  whitelist: builtinWhitelist(), // [{ type:'path'|'ext', value:'...' }]
   includeExt: [],
   excludeExt: [],
   maxDepth: 14,
@@ -104,4 +133,4 @@ class ConfigStore {
   }
 }
 
-module.exports = { ConfigStore, DEFAULTS };
+module.exports = { ConfigStore, DEFAULTS, builtinWhitelist };
