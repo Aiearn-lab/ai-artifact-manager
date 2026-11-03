@@ -806,14 +806,18 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 
 /* ---------- 回收站 ---------- */
 .trash-body { flex: 1; overflow: auto; padding: 14px 20px; display: flex; flex-direction: column; gap: 12px; }
-.trash-empty { text-align: center; color: var(--muted); padding: 44px 0; font-size: 13px; }
+.trash-note { margin: 12px 20px 0; padding: 10px 13px; border-radius: 10px; background: #eef5ff; border: 1px solid #d6e4fb; color: #35507d; font-size: 12px; line-height: 1.65; }
+.trash-note b { color: #1d4ed8; }
+.trash-empty { text-align: center; color: var(--muted); padding: 44px 0; font-size: 13px; line-height: 1.8; }
+.muted-sm { font-size: 11.5px; color: #9aa4b5; }
 .trash-batch { border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
 .trash-batch-head { padding: 9px 13px; background: var(--panel-soft); font-size: 12px; color: var(--text-soft); display: flex; justify-content: space-between; gap: 10px; }
 .trash-item { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-top: 1px solid #f0f3f8; font-size: 12.5px; }
 .trash-item .ti-main { flex: 1; min-width: 0; }
 .trash-item .ti-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
 .trash-item .ti-path { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
-.trash-foot { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+.trash-item .ti-size { font-size: 11px; color: var(--muted); flex: 0 0 auto; }
+.trash-foot { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
 /* ---------- toast ---------- */
 .toast {
