@@ -228,7 +228,17 @@ async function restoreFromTrash(batchDir, trashedPath) {
     }
   }
 
-  await fsp.rename(item.trashedPath, target);
+  try {
+    await fsp.rename(item.trashedPath, target);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      // 跨盘恢复：先复制再删，避免直接 rename 失败
+      await fsp.copyFile(item.trashedPath, target);
+      await fsp.unlink(item.trashedPath);
+    } else {
+      throw err;
+    }
+  }
   item.restoredAt = Date.now();
   item.restoredTo = target;
   await fsp.writeFile(manifestPath, JSON.stringify(m, null, 2), 'utf8');
