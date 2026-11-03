@@ -102,12 +102,11 @@ const TOOLS = [
   },
   {
     name: 'archive_files',
-    description: '把指定文件按分类归档到统一目录（默认复制，不破坏原文件）。',
+    description: '把指定文件按分类移动到统一归档目录（剪切，原位置不再保留）。本产品没有复制归档。',
     inputSchema: {
       type: 'object',
       properties: {
         paths: { type: 'array', items: { type: 'string' }, description: '要归档的文件完整路径列表' },
-        mode: { type: 'string', enum: ['copy', 'move'], description: 'copy=复制（默认），move=剪切' },
         targetDir: { type: 'string', description: '归档目标根目录，不填则用软件里配置的默认归档目录' }
       },
       required: ['paths']
@@ -208,8 +207,8 @@ function createHandler(options) {
         }
         if (!picked.length) return errorResult('传入的路径都不在索引里，未执行归档。');
 
-        // 工具说明承诺「默认复制」：只有显式传 move 才剪切，不传一律复制
-        const result = await archiver.archive(picked, root, { mode: args.mode === 'move' ? 'move' : 'copy' });
+        // 本产品没有复制归档：一律移动，防止「越清越多」
+        const result = await archiver.archive(picked, root);
         return textResult(
           `归档完成：成功 ${result.ok} 个，失败 ${result.failed.length} 个，跳过 ${result.skipped.length} 个。\n目标目录：${result.target}` +
             (result.failed.length ? `\n失败明细：${result.failed.map((x) => `${x.path}（${x.error}）`).join('；')}` : '') +
