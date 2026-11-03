@@ -916,3 +916,62 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
   .workspace { flex-direction: column; }
   .preview-panel { flex: 0 0 300px; min-width: 0; max-width: none; }
 }
+
+/* ---------- 启动画面 ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: linear-gradient(160deg, #f7faff 0%, #eef4ff 55%, #e7effc 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: opacity .32s ease;
+}
+.splash.out { opacity: 0; pointer-events: none; }
+.splash-mark {
+  width: 64px; height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(150deg, #4f8ef7, #1d4ed8);
+  color: #fff;
+  font-size: 26px; font-weight: 700; letter-spacing: .5px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 22px rgba(29, 78, 216, .22);
+  margin-bottom: 14px;
+}
+.splash h1 { font-size: 21px; font-weight: 650; color: #16233b; margin: 0; }
+.splash-sub { font-size: 12.5px; color: #6b7a94; margin: 2px 0 22px; }
+.splash-brand { font-size: 12px; color: #35507d; margin: 0; letter-spacing: .3px; }
+.splash-url { font-size: 11px; color: #93a1b8; margin: 3px 0 0; }
+
+/* ---------- Pro 激活 ---------- */
+.pro-activate { display: flex; gap: 8px; align-items: center; }
+.pro-activate input {
+  flex: 1;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 13px;
+  font-family: inherit;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.pro-activate input:focus { outline: none; border-color: var(--primary); }
+
+/* ---------- 设置弹窗底部品牌栏 ---------- */
+.settings-brandbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-soft);
+  font-size: 11.5px;
+  color: #8a94a6;
+}
+.settings-brandbar .sb-brand { color: #35507d; font-weight: 600; }
+.settings-brandbar a { color: var(--primary); }
+.settings-brandbar .sb-note { margin-left: auto; color: #a8b1c1; }
