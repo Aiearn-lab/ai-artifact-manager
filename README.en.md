@@ -62,7 +62,7 @@ Generic file organizers don't know what an AI artifact is. **This one only does 
 
 ### Scan
 
-Whole disk, common locations (Downloads / Desktop / Documents), or a single folder. Skips system folders, program folders and binary file types by default — you can add more.
+Whole disk, common locations (Downloads / Desktop / Documents), or a single folder. Skips system folders, program folders, known AI-tool cache directories (.accio / Coze / .qoder and friends), and binary file types by default — you can add more. Program logs (.log) are never "knowledge": they land in Disposable no matter how long they are.
 
 ### Tell AI output from the rest, without any AI
 
