@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fsp = require('fs').promises;
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 const scanner = require('./src/scanner');
@@ -23,6 +24,7 @@ let configStore = null;
 let mcpServer = null;
 let lastScan = null;
 let autoScanDir = null;
+let scanAbort = false;
 
 /** portable 版启动时 process.execPath 指向临时解压目录，必须拿真实 exe 路径 */
 function appExePath() {
@@ -103,6 +105,13 @@ function pickFiles(paths) {
   return (lastScan ? lastScan.files : []).filter((f) => set.has(path.resolve(f.path)));
 }
 
+/** 预览/打开/定位只允许操作本次扫描结果里的文件，防止渲染进程传任意路径 */
+function assertKnownFile(filePath) {
+  const f = findFile(filePath);
+  if (!f) throw new Error('这个文件不在本次扫描结果里，先扫描一次');
+  return f;
+}
+
 async function writeIndex() {
   if (!lastScan) return;
   const indexPath = path.join(app.getPath('userData'), 'mcp-index.json');
@@ -150,9 +159,16 @@ async function loadLastScan() {
 
 async function ensureMcp() {
   if (!mcpServer) {
+    const cfg = configStore.get();
+    let token = (cfg.mcp && cfg.mcp.token) || '';
+    if (!token) {
+      token = crypto.randomBytes(16).toString('hex');
+      await configStore.patch({ mcp: { token } });
+    }
     mcpServer = createMcpHttpServer({
       indexPath: path.join(app.getPath('userData'), 'mcp-index.json'),
-      getDefaultArchiveRoot: () => configStore.get().archiveRoot
+      getDefaultArchiveRoot: () => configStore.get().archiveRoot,
+      token
     });
   }
   return mcpServer.start(3927);
@@ -161,12 +177,14 @@ async function ensureMcp() {
 function mcpConfigPayload() {
   const indexPath = path.join(app.getPath('userData'), 'mcp-index.json');
   const archive = configStore.get().archiveRoot || '';
+  const token = (configStore.get().mcp && configStore.get().mcp.token) || '';
   const info = mcpServer ? mcpServer.info() : { running: false, port: 0, endpoint: '' };
+  const port = info.port || 3927;
   return {
     http: {
       mcpServers: {
         'ai-artifact-manager': {
-          url: `http://127.0.0.1:${info.port || 3927}/mcp`
+          url: `http://127.0.0.1:${port}/mcp${token ? `?token=${token}` : ''}`
         }
       }
     },
@@ -274,6 +292,7 @@ function registerIpc() {
 
     const cfg = configStore.get();
     sendProgress('scanning', 0, 0);
+    scanAbort = false;
 
     // 归档目录永远不参与扫描，否则整理完再扫一遍会把自己归档的文件重新扫出来
     const whitelist = (Array.isArray(p.whitelist) ? p.whitelist : cfg.whitelist || []).slice();
@@ -282,6 +301,7 @@ function registerIpc() {
     const merged = [];
     const errors = [];
     let truncated = false;
+    let cancelled = false;
     let durationMs = 0;
     let scannedAt = Date.now();
 
@@ -291,13 +311,17 @@ function registerIpc() {
         maxDepth: p.maxDepth || cfg.maxDepth,
         maxFiles: p.maxFiles || cfg.maxFiles,
         includeExt: Array.isArray(p.includeExt) ? p.includeExt : cfg.includeExt,
-        excludeExt: Array.isArray(p.excludeExt) ? p.excludeExt : cfg.excludeExt
+        excludeExt: Array.isArray(p.excludeExt) ? p.excludeExt : cfg.excludeExt,
+        onProgress: (n) => sendProgress('scanning', n, 0),
+        shouldStop: () => scanAbort
       });
       merged.push(...r.files);
       errors.push(...r.errors);
       truncated = truncated || r.truncated;
+      cancelled = cancelled || r.cancelled;
       durationMs += r.durationMs;
       scannedAt = r.scannedAt || scannedAt;
+      if (cancelled) break;
     }
 
     // 多根之间可能有重叠（比如同时选了桌面和用户目录），按路径去重
@@ -331,6 +355,7 @@ function registerIpc() {
 
     const summary = classifier.summarize(files);
     summary.duplicateStats = dupe.stats;
+    summary.cancelled = cancelled;
     summary.groups = dupe.groups.map((g) => ({
       kind: g.kind,
       similarity: g.similarity,
@@ -365,8 +390,14 @@ function registerIpc() {
     return toPublic(lastScan);
   });
 
+  ipcMain.handle('scan:cancel', () => {
+    scanAbort = true;
+    return true;
+  });
+
   ipcMain.handle('file:preview', async (e, filePath) => {
     try {
+      assertKnownFile(filePath);
       const stat = await fsp.stat(filePath);
       if (stat.size > 2 * 1024 * 1024) {
         return { ok: false, error: '文件超过 2MB，暂不预览。可点「打开」用系统软件查看。' };
@@ -383,8 +414,12 @@ function registerIpc() {
     }
   });
 
-  ipcMain.handle('file:open', (e, filePath) => shell.openPath(filePath));
+  ipcMain.handle('file:open', (e, filePath) => {
+    assertKnownFile(filePath);
+    return shell.openPath(filePath);
+  });
   ipcMain.handle('file:reveal', (e, filePath) => {
+    assertKnownFile(filePath);
     shell.showItemInFolder(filePath);
     return true;
   });
