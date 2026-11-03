@@ -64,9 +64,9 @@ Generic file organizers don't know what an AI artifact is. **This one only does 
 
 Whole disk, common locations (Downloads / Desktop / Documents), or a single folder. Skips system folders, program folders and binary file types by default — you can add more.
 
-### Detect the source, without any AI
+### Tell AI output from the rest, without any AI
 
-Pure pattern matching on filenames, header comments and export formats. Recognizes ChatGPT, Claude, DeepSeek, Doubao, Kimi, Cursor, Copilot, Gemini, Qwen and more. No API calls, works offline.
+Pure pattern matching on filenames, header comments and export formats. Each file is labeled with one of exactly two sources — **AI tool** or **Unknown**. There are thousands of AI tools out there; guessing a wrong name costs more trust than not guessing at all. No API calls, works offline.
 
 ### Categorize and advise
 
