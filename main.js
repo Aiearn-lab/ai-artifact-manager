@@ -224,26 +224,6 @@ function assertKnownFile(filePath) {
 }
 
 /**
- * Pro 激活码：离线校验，不联网、不绑设备。
- * 格式 ZW-XXXX-XXXX-序号，前两段由密钥和序号算出来，改一位就对不上。
- * 用 scripts/make-pro-code.js 生成（同一个密钥）。
- */
-const PRO_SECRET = 'zhiwei-studio-pro-2026';
-
-function proCodeFor(seq) {
-  const h = crypto.createHmac('sha256', PRO_SECRET).update(String(seq)).digest('hex').toUpperCase();
-  return `ZW-${h.slice(0, 4)}-${h.slice(4, 8)}-${seq}`;
-}
-
-function verifyProCode(input) {
-  const m = /^ZW-([0-9A-F]{4})-([0-9A-F]{4})-(\d{1,6})$/i.exec(String(input || '').trim().toUpperCase());
-  if (!m) return null;
-  const expect = proCodeFor(m[3]);
-  if (expect !== `ZW-${m[1]}-${m[2]}-${m[3]}`) return null;
-  return { seq: Number(m[3]) };
-}
-
-/**
  * 全文搜索：按需读文件开头一段，带内存缓存。
  * 「只记得内容不记得文件名」是这个工具最该解决的问题，
  * 所以搜索必须能钻进正文，不能只比文件名。
@@ -288,6 +268,118 @@ function makeSnippet(text, needle) {
     .replace(/^[#>\-\s]+/, '')
     .trim();
   return `${start > 0 ? '…' : ''}${piece}${end < text.length ? '…' : ''}`;
+}
+
+/* ---------------- 自动监控：盯着几个文件夹，出现新文件就分好类告诉用户 ---------------- */
+// 只发现、只分类、只提示，绝不自己动文件——要不要归档永远由用户决定
+const watchState = {
+  enabled: false,
+  dirs: [],
+  watchers: [],
+  debounce: new Map(),
+  known: new Map(), // path -> `mtime:size`
+  recent: [],
+  priming: false
+};
+
+function watchKey(f) {
+  return `${f.mtime}:${f.size}`;
+}
+
+async function watchScanOnce(dir) {
+  if (!dir) return { added: 0 };
+  const cfg = configStore.safe();
+  let r;
+  try {
+    r = await scanner.scan(dir, {
+      whitelist: cfg.whitelist,
+      maxDepth: cfg.maxDepth || 14,
+      maxFiles: 20000
+    });
+  } catch {
+    return { added: 0 };
+  }
+
+  const fresh = [];
+  for (const f of r.files) {
+    const k = watchKey(f);
+    const prev = watchState.known.get(f.path);
+    watchState.known.set(f.path, k);
+    if (prev === undefined) fresh.push(f); // 第一次见到才算新文件
+  }
+  if (!fresh.length || watchState.priming) return { added: 0 };
+
+  classifier.classifyAll(fresh);
+  const items = fresh.map((f) => ({
+    path: f.path,
+    name: f.name,
+    size: f.size,
+    source: (f.source && f.source.name) || '未识别',
+    category: (f.category && f.category.label) || '其他',
+    retention: (f.category && f.category.retention) || ''
+  }));
+
+  const entry = { at: Date.now(), dir, count: items.length, items: items.slice(0, 30) };
+  watchState.recent.unshift(entry);
+  watchState.recent = watchState.recent.slice(0, 30);
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('watch:found', entry);
+  }
+  return { added: items.length, entry };
+}
+
+async function startWatch(dirs) {
+  stopWatch();
+  const list = Array.from(new Set((dirs || []).filter((d) => typeof d === 'string' && d.trim())));
+  if (!list.length) return { ok: false, error: '先选一个要盯的文件夹' };
+
+  for (const dir of list) {
+    try {
+      const w = fsSync.watch(dir, { recursive: true }, () => {
+        const prev = watchState.debounce.get(dir);
+        if (prev) clearTimeout(prev);
+        watchState.debounce.set(
+          dir,
+          setTimeout(() => {
+            watchState.debounce.delete(dir);
+            watchScanOnce(dir);
+          }, 2500)
+        );
+      });
+      watchState.watchers.push(w);
+    } catch (err) {
+      stopWatch();
+      return { ok: false, error: `盯不住「${dir}」：${err.message}` };
+    }
+  }
+
+  watchState.enabled = true;
+  watchState.dirs = list;
+
+  // 先静默扫一遍把现有文件记为已知，免得一开监控就报几百个"新文件"
+  watchState.priming = true;
+  for (const dir of list) await watchScanOnce(dir);
+  watchState.priming = false;
+
+  await configStore.patch({ watch: { enabled: true, dirs: list } });
+  return { ok: true, dirs: list };
+}
+
+function stopWatch() {
+  for (const w of watchState.watchers) {
+    try {
+      w.close();
+    } catch {
+      /* 关不掉也不影响 */
+    }
+  }
+  for (const t of watchState.debounce.values()) clearTimeout(t);
+  watchState.watchers = [];
+  watchState.debounce.clear();
+  watchState.enabled = false;
+  watchState.dirs = [];
+  watchState.known.clear();
 }
 
 async function writeIndex() {
@@ -585,19 +677,6 @@ function registerIpc() {
     return true;
   });
 
-  // Pro 激活：校验通过就写进本地配置，全程不联网
-  ipcMain.handle('pro:activate', async (e, code) => {
-    const hit = verifyProCode(code);
-    if (!hit) return { ok: false, error: '激活码对不上，检查一下是不是复制少了字符' };
-    await configStore.patch({ pro: { activated: true, code: String(code).trim().toUpperCase() } });
-    return { ok: true, seq: hit.seq };
-  });
-
-  ipcMain.handle('pro:deactivate', async () => {
-    await configStore.patch({ pro: { activated: false, code: '' } });
-    return { ok: true };
-  });
-
   // 全文搜索：只搜文本类文件，最多跑 12 秒，没搜完也先返回已找到的
   ipcMain.handle('search:content', async (e, payload) => {
     const q = String((payload && payload.q) || '').trim();
@@ -637,6 +716,30 @@ function registerIpc() {
 
     await Promise.all(Array.from({ length: Math.min(SEARCH_CONCURRENCY, files.length) }, worker));
     return { ok: true, hits, scanned: files.length, elapsed: Date.now() - started, partial };
+  });
+
+  // ---------- 自动监控 ----------
+  ipcMain.handle('watch:start', async (e, dirs) => startWatch(dirs));
+  ipcMain.handle('watch:stop', async () => {
+    stopWatch();
+    await configStore.patch({ watch: { enabled: false, dirs: [] } });
+    return { ok: true };
+  });
+  ipcMain.handle('watch:status', () => ({
+    enabled: watchState.enabled,
+    dirs: watchState.dirs,
+    recent: watchState.recent
+  }));
+  ipcMain.handle('watch:scanNow', async (e, dir) => {
+    const target = dir || watchState.dirs[0];
+    if (!target) return { ok: false, error: '还没设置要盯的文件夹' };
+    const r = await watchScanOnce(target);
+    return { ok: true, added: r.added || 0 };
+  });
+  ipcMain.handle('watch:pickDir', async () => {
+    const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths.length) return { ok: false };
+    return { ok: true, dir: r.filePaths[0] };
   });
 
   ipcMain.handle('file:preview', async (e, filePath) => {
@@ -1041,6 +1144,18 @@ async function init() {
     } catch {
       /* 端口被占用时不阻断启动，用户可在界面里重开 */
     }
+  }
+
+  // 上次开着自动监控的，启动时接着盯（先等窗口就绪，免得事件发不出去）
+  const wcfg = configStore.get().watch;
+  if (wcfg && wcfg.enabled && Array.isArray(wcfg.dirs) && wcfg.dirs.length) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        startWatch(wcfg.dirs).catch(() => {
+          /* 目录没了就安静放弃，不打扰用户 */
+        });
+      }, 1200);
+    });
   }
 
   autoScanDir = process.env.AI_AM_AUTOSCAN || parseScanArg(process.argv);
