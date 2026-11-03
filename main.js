@@ -16,6 +16,7 @@ const ai = require('./src/ai');
 const { ConfigStore } = require('./src/config-store');
 const { createMcpHttpServer } = require('./src/mcp-http');
 const { safeFileName } = require('./src/safe-path');
+const { sourceLabel } = require('./src/source-label');
 
 const APP_NAME = 'AI产出管家';
 const VERSION = require('./package.json').version;
@@ -314,7 +315,7 @@ async function watchScanOnce(dir) {
     path: f.path,
     name: f.name,
     size: f.size,
-    source: (f.source && f.source.name) || '未识别',
+    source: sourceLabel(f.source),
     category: (f.category && f.category.label) || '其他',
     retention: (f.category && f.category.retention) || ''
   }));
@@ -1055,6 +1056,20 @@ function createWindow() {
       setTimeout(async () => {
         try {
           const action = process.env.AI_AM_SHOT_ACTION;
+          // 截图专用：强制界面语言，不受本机上次选择影响
+          if (process.env.AI_AM_SHOT_LANG) {
+            await mainWindow.webContents.executeJavaScript(
+              `typeof setLang === 'function' && setLang(${JSON.stringify(process.env.AI_AM_SHOT_LANG)}); true`
+            );
+            await new Promise((r) => setTimeout(r, 900));
+          }
+          // 截图专用：收起首次使用提示，让画面干净
+          if (process.env.AI_AM_SHOT_CLEAN) {
+            await mainWindow.webContents.executeJavaScript(
+              "(() => { const b = document.querySelector('#btnOnboardOk'); if (b && b.offsetParent) b.click(); return true; })()"
+            );
+            await new Promise((r) => setTimeout(r, 400));
+          }
           if (action === 'select') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('.file-row') && document.querySelector('.file-row').click(); true");
             await new Promise((r) => setTimeout(r, 1400));
@@ -1098,6 +1113,11 @@ function createWindow() {
           } else if (action === 'stats') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnStats').click(); true");
             await new Promise((r) => setTimeout(r, 600));
+          } else if (action === 'langstats') {
+            await mainWindow.webContents.executeJavaScript("typeof setLang === 'function' && setLang('en'); true");
+            await new Promise((r) => setTimeout(r, 1200));
+            await mainWindow.webContents.executeJavaScript("document.querySelector('#btnStats').click(); true");
+            await new Promise((r) => setTimeout(r, 700));
           } else if (action === 'trash') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnOpenTrash').click(); true");
             await new Promise((r) => setTimeout(r, 800));
@@ -1125,7 +1145,7 @@ function createWindow() {
           /* ignore */
         }
         app.quit();
-      }, 3500);
+      }, 5200);
     });
   }
 
