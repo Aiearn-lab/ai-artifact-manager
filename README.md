@@ -25,6 +25,24 @@
 
 ---
 
+## 长什么样
+
+**文件清单**：左边一列清单，点哪个文件，右边直接看内容，不用另外打开软件。
+
+![主界面](docs/screenshots/main.png)
+
+**知识库**：AI 写的长文档自动归到这里，按主题分类，标好字数。
+
+![知识库](docs/screenshots/knowledge.png)
+
+**统计**：一眼看清文件都来自哪个 AI、哪些能腾出空间。
+
+![统计](docs/screenshots/stats.png)
+
+> 截图里的文件是演示用的示例文档，不是真实用户数据。
+
+---
+
 ## 你是不是也有这个问题
 
 用 ChatGPT、Claude、DeepSeek、Cursor 这些工具干活，几个月后文件夹会变成这样：
