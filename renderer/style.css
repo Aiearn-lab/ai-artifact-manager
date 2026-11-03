@@ -182,7 +182,26 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 .view-summary .warn { color: var(--danger); font-weight: 650; }
 .view-summary .ok { color: var(--ok); font-weight: 650; }
 
-.mini-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.overview-strip { display: flex; gap: 10px; align-items: stretch; }
+.mini-stats { flex: 1.9; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.mini-chart {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 6px 12px;
+  min-width: 0;
+}
+.mini-donut { flex: 0 0 56px; }
+.mini-donut-num { font-size: 14px; font-weight: 750; fill: #1f2937; }
+.mini-legend { flex: 1; display: grid; grid-template-columns: 1fr; gap: 1px; min-width: 0; }
+.mini-legend-item { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-soft); min-width: 0; line-height: 1.35; }
+.mini-legend-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-legend-val { color: var(--muted); font-variant-numeric: tabular-nums; }
+.mini-legend-empty { font-size: 10.5px; color: #a3adbf; line-height: 1.6; }
 .mini-stat {
   background: var(--panel-soft);
   border: 1px solid var(--border);
@@ -397,9 +416,9 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 
 /* ---------- 预览（多功能区） ---------- */
 .preview-panel {
-  flex: 0 0 42%;
-  min-width: 420px;
-  max-width: 760px;
+  flex: 0 0 38%;
+  min-width: 380px;
+  max-width: 680px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -812,11 +831,13 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 @media (max-width: 1240px) {
   .preview-panel { flex-basis: 40%; min-width: 360px; }
   .bulk-actions .btn { padding: 6px 9px; font-size: 12px; }
+  .mini-chart { flex: 0.85; }
 }
 
 @media (max-width: 1040px) {
   .scan-actions .btn:not(.btn-primary) { display: none; }
   .nav-stats { display: none; }
+  .mini-chart { display: none; }
   .stat-cards { grid-template-columns: repeat(2, 1fr); }
   .chart-row { grid-template-columns: 1fr; }
   .table-head, .file-row { grid-template-columns: 32px minmax(150px, 2.4fr) 100px 70px; }
