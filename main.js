@@ -1066,6 +1066,14 @@ function createWindow() {
               "document.querySelector('#btnSettings').click(); document.querySelector('#settingsTabs button[data-tab=\"ai\"]').click(); true"
             );
             await new Promise((r) => setTimeout(r, 600));
+          } else if (action === 'langsettings') {
+            await mainWindow.webContents.executeJavaScript("typeof setLang === 'function' && setLang('en'); true");
+            await new Promise((r) => setTimeout(r, 900));
+            await mainWindow.webContents.executeJavaScript("document.querySelector('#btnSettings').click(); true");
+            await new Promise((r) => setTimeout(r, 800));
+          } else if (action === 'langen') {
+            await mainWindow.webContents.executeJavaScript("typeof setLang === 'function' && setLang('en'); true");
+            await new Promise((r) => setTimeout(r, 1500));
           } else if (action === 'pro') {
             await mainWindow.webContents.executeJavaScript(
               "document.querySelector('#btnSettings').click(); document.querySelector('#settingsTabs button[data-tab=\"pro\"]').click(); true"
