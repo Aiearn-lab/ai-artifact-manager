@@ -173,6 +173,10 @@ function createHandler(options) {
 
       if (name === 'list_by_category') {
         const cat = String(args.category || 'all');
+        // 传错分类名不能静默返回全部文件——那是误导，直接报错
+        if (!['knowledge', 'tool', 'junk', 'all'].includes(cat)) {
+          return errorResult(`未知分类：${cat}。可用值：knowledge / tool / junk / all`);
+        }
         const limit = Math.min(Math.max(Number(args.limit) || 50, 1), 500);
         let list = index.files;
         if (cat === 'knowledge') list = index.files.filter((f) => (f.category && f.category.group === 'knowledge') || (f.category && f.category.key === 'knowledge'));
@@ -204,7 +208,8 @@ function createHandler(options) {
         }
         if (!picked.length) return errorResult('传入的路径都不在索引里，未执行归档。');
 
-        const result = await archiver.archive(picked, root, { mode: args.mode === 'copy' ? 'copy' : 'move' });
+        // 工具说明承诺「默认复制」：只有显式传 move 才剪切，不传一律复制
+        const result = await archiver.archive(picked, root, { mode: args.mode === 'move' ? 'move' : 'copy' });
         return textResult(
           `归档完成：成功 ${result.ok} 个，失败 ${result.failed.length} 个，跳过 ${result.skipped.length} 个。\n目标目录：${result.target}` +
             (result.failed.length ? `\n失败明细：${result.failed.map((x) => `${x.path}（${x.error}）`).join('；')}` : '') +
