@@ -3,7 +3,7 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-const MAX_RENDER = 600;
+const MAX_RENDER = 800;
 
 const CAT_COLORS = {
   knowledge: '#2563eb',
@@ -13,20 +13,39 @@ const CAT_COLORS = {
   other: '#94a3b8'
 };
 
+const VIEW_COLUMNS = {
+  files: ['', '文件名', 'AI 来源', '分类', '大小', '所在路径'],
+  knowledge: ['', '文件名', '主题标签', '字数', '大小', '所在路径'],
+  tools: ['', '文件名', '类型', '语言', '大小', '所在路径'],
+  duplicates: ['', '文件名', '重复度', '保留哪份', '大小', '所在路径']
+};
+
+const LANG_MAP = {
+  '.py': 'Python', '.js': 'JavaScript', '.mjs': 'JavaScript', '.cjs': 'JavaScript',
+  '.ts': 'TypeScript', '.tsx': 'TypeScript', '.jsx': 'JavaScript',
+  '.sh': 'Shell', '.bat': 'Batch', '.cmd': 'Batch', '.ps1': 'PowerShell',
+  '.html': 'HTML', '.htm': 'HTML', '.css': 'CSS', '.scss': 'SCSS',
+  '.sql': 'SQL', '.java': 'Java', '.go': 'Go', '.rs': 'Rust', '.rb': 'Ruby',
+  '.php': 'PHP', '.c': 'C', '.cpp': 'C++', '.h': 'C/C++', '.vue': 'Vue', '.svelte': 'Svelte'
+};
+
 const state = {
   config: null,
   scan: null,
   files: [],
   filtered: [],
   filter: { cat: 'all', source: 'all', q: '', sort: 'mtime' },
+  view: 'files',
   selection: new Set(),
   currentId: null,
   localAi: [],
   mcp: null,
+  disks: [],
+  appPaths: {},
   busy: false
 };
 
-/* ---------------- 工具 ---------------- */
+/* ---------------- 基础工具 ---------------- */
 function fmtSize(bytes) {
   const n = Number(bytes) || 0;
   if (n < 1024) return `${n} B`;
@@ -58,13 +77,22 @@ function toast(msg, isError) {
   el.classList.toggle('err', !!isError);
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
 }
 
 function setBusy(v) {
   state.busy = v;
-  $('#btnScan').disabled = v;
-  $('#btnScan').textContent = v ? '扫描中…' : '开始扫描';
+  ['#btnScanScope', '#btnQuickScan', '#btnPickFolder', '#btnEmptyScan', '#btnEmptyFolder'].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.disabled = v;
+  });
+  const scope = $('#btnScanScope');
+  if (scope) scope.textContent = v ? '正在扫描…' : '扫描整个电脑';
+}
+
+function langOf(ext) {
+  if (!ext) return '—';
+  return LANG_MAP[String(ext).toLowerCase()] || String(ext).replace('.', '').toUpperCase();
 }
 
 /* ---------------- 初始化 ---------------- */
@@ -73,8 +101,14 @@ async function init() {
 
   try {
     state.config = await window.api.configGet();
-  } catch (err) {
-    toast(`读取设置失败：${err.message}`, true);
+  } catch {
+    /* 配置读不到也能用默认值 */
+  }
+
+  try {
+    state.appPaths = await window.api.appPaths();
+  } catch {
+    state.appPaths = {};
   }
 
   try {
@@ -85,15 +119,14 @@ async function init() {
     /* ignore */
   }
 
-  renderTabs(0, 0, 0, 0, 0, 0);
-  renderSourceFilter();
-
   try {
     const last = await window.api.lastScan();
     if (last && last.files && last.files.length) applyScan(last);
   } catch {
     /* ignore */
   }
+
+  renderAll();
 
   window.api.onProgress((p) => {
     const bar = $('#progressBar');
@@ -105,37 +138,64 @@ async function init() {
     bar.classList.remove('hidden');
     const ratio = p.total ? Math.min(1, p.done / p.total) : 0.15;
     fill.style.width = `${Math.max(8, ratio * 100)}%`;
-    const label = { scanning: '正在扫描文件…', classifying: '正在分类…', deduping: '正在比对重复内容…' }[p.phase] || '处理中…';
+    const label = {
+      scanning: '正在看文件…',
+      classifying: '正在分类…',
+      deduping: '正在找重复内容…'
+    }[p.phase] || '处理中…';
     $('#statusText').textContent = label;
   });
 
   window.api.onAutoScan((dir) => {
     if (!dir) return;
-    $('#scanPath').value = dir;
-    doScan(dir);
+    scanRoots([dir], '指定文件夹');
   });
 }
 
 /* ---------------- 事件 ---------------- */
 function bindEvents() {
+  $('#btnScanScope').addEventListener('click', openDiskModal);
+  $('#btnQuickScan').addEventListener('click', quickScan);
   $('#btnPickFolder').addEventListener('click', pickFolder);
-  $('#btnEmptyPick').addEventListener('click', pickFolder);
-  $('#btnScan').addEventListener('click', () => {
-    const p = $('#scanPath').value.trim();
-    if (!p) return pickFolder();
-    doScan(p);
+  $('#btnEmptyScan').addEventListener('click', quickScan);
+  $('#btnEmptyFolder').addEventListener('click', pickFolder);
+
+  $('#btnCloseDisk').addEventListener('click', closeDiskModal);
+  $('#diskModal').addEventListener('click', (e) => {
+    if (e.target === $('#diskModal')) closeDiskModal();
+  });
+  $('#btnPickFolderFromModal').addEventListener('click', async () => {
+    closeDiskModal();
+    await pickFolder();
+  });
+  $('#diskList').addEventListener('click', (e) => {
+    const item = e.target.closest('.disk-item');
+    if (!item) return;
+    const root = item.dataset.root;
+    closeDiskModal();
+    scanRoots([root], `${root} 全盘`);
+  });
+
+  $('#navTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.nav-tab');
+    if (!btn) return;
+    setView(btn.dataset.view);
+  });
+
+  $('#btnStats').addEventListener('click', openStats);
+  $('#btnCloseStats').addEventListener('click', closeStats);
+  $('#statsModal').addEventListener('click', (e) => {
+    if (e.target === $('#statsModal')) closeStats();
   });
 
   $('#searchInput').addEventListener('input', (e) => {
     state.filter.q = e.target.value.trim();
     renderList();
   });
-
   $('#sourceFilter').addEventListener('change', (e) => {
     state.filter.source = e.target.value;
     renderList();
   });
-
   $('#sortSelect').addEventListener('change', (e) => {
     state.filter.sort = e.target.value;
     renderList();
@@ -150,11 +210,8 @@ function bindEvents() {
   });
 
   $('#selectAll').addEventListener('change', (e) => {
-    if (e.target.checked) {
-      for (const f of state.filtered) state.selection.add(f.id);
-    } else {
-      state.selection.clear();
-    }
+    if (e.target.checked) for (const f of state.filtered) state.selection.add(f.id);
+    else state.selection.clear();
     renderList();
   });
 
@@ -175,24 +232,31 @@ function bindEvents() {
     updateSelectionUI();
   });
 
+  $('#btnOneClick').addEventListener('click', doOneClickOrganize);
   $('#btnArchive').addEventListener('click', doArchive);
   $('#btnExport').addEventListener('click', doExport);
   $('#btnCleanDup').addEventListener('click', doCleanDuplicates);
-  $('#btnOpenTrash').addEventListener('click', async () => {
-    try {
-      const dir = await window.api.openTrash();
-      toast(`已打开回收站：${dir}`);
-    } catch (err) {
-      toast(`打开回收站失败：${err.message}`, true);
-    }
+  $('#btnOpenTrash').addEventListener('click', openTrash);
+
+  $('#btnPreviewOpen').addEventListener('click', () => {
+    const f = currentFile();
+    if (f) window.api.openFile(f.path);
   });
+  $('#btnPreviewReveal').addEventListener('click', () => {
+    const f = currentFile();
+    if (f) window.api.reveal(f.path);
+  });
+  $('#btnPreviewArchive').addEventListener('click', () => archiveCurrent());
+  $('#btnAiSummary').addEventListener('click', () => runAi('summary'));
+  $('#btnAiRename').addEventListener('click', () => runAi('rename'));
+  $('#btnAiTags').addEventListener('click', () => runAi('tags'));
+  $('#btnAiCategory').addEventListener('click', () => runAi('category'));
 
   $('#btnSettings').addEventListener('click', openSettings);
   $('#btnCloseSettings').addEventListener('click', closeSettings);
   $('#settingsModal').addEventListener('click', (e) => {
     if (e.target === $('#settingsModal')) closeSettings();
   });
-
   $('#settingsTabs').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-tab]');
     if (!btn) return;
@@ -205,14 +269,9 @@ function bindEvents() {
     const dir = await window.api.pickFolder();
     if (dir) $('#setArchiveRoot').value = dir;
   });
-
   $('#btnSaveGeneral').addEventListener('click', saveGeneral);
   $('#btnCtxInstall').addEventListener('click', () => setContextMenu(true));
   $('#btnCtxUninstall').addEventListener('click', () => setContextMenu(false));
-  $('#btnOpenPro').addEventListener('click', () => {
-    $$('#settingsTabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'pro'));
-    $$('.settings-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === 'pro'));
-  });
 
   $('#btnDetectLocal').addEventListener('click', detectLocalAi);
   $('#btnSaveAi').addEventListener('click', saveAi);
@@ -221,59 +280,7 @@ function bindEvents() {
   $('#btnMcpToggle').addEventListener('click', toggleMcp);
   $('#btnCopyMcp').addEventListener('click', copyMcpConfig);
 
-  $('#aiResult').addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-ai-action]');
-    if (!btn) return;
-    const f = currentFile();
-    if (!f) return;
-    const action = btn.dataset.aiAction;
-
-    try {
-      if (action === 'rename') {
-        const newName = btn.dataset.value;
-        if (!window.confirm(`确定把「${f.name}」重命名为「${newName}」吗？\n\n只改文件名，不动内容。`)) return;
-        const r = await window.api.renameFile({ path: f.path, name: newName });
-        f.name = r.name;
-        f.path = r.path;
-        f.ext = (r.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
-        toast(`已重命名为：${r.name}`);
-        renderList();
-        selectFile(f.id);
-      } else if (action === 'tags') {
-        const tags = btn.dataset.value.split(',').map((s) => s.trim()).filter(Boolean);
-        await window.api.aiApplyTags({ path: f.path, tags });
-        if (!f.category) {
-          f.category = { key: 'other', group: 'other', label: '其他文件', retention: '按需留存', reason: '', tags: [] };
-        }
-        f.category.tags = tags;
-        toast('标签已保存到文件');
-        renderList();
-        selectFile(f.id);
-      } else if (action === 'category') {
-        const r = await window.api.aiApplyCategory({ path: f.path, category: btn.dataset.value });
-        f.category = r.category;
-        toast(`已应用分类：${r.category.label}`);
-        renderAll();
-        selectFile(f.id);
-      }
-    } catch (err) {
-      toast(`操作失败：${err.message}`, true);
-    }
-  });
-
-  $('#btnPreviewOpen').addEventListener('click', () => {
-    const f = currentFile();
-    if (f) window.api.openFile(f.path);
-  });
-  $('#btnPreviewReveal').addEventListener('click', () => {
-    const f = currentFile();
-    if (f) window.api.reveal(f.path);
-  });
-
-  $('#btnAiSummary').addEventListener('click', () => runAi('summary'));
-  $('#btnAiRename').addEventListener('click', () => runAi('rename'));
-  $('#btnAiTags').addEventListener('click', () => runAi('tags'));
-  $('#btnAiCategory').addEventListener('click', () => runAi('category'));
+  $('#aiResult').addEventListener('click', onAiAction);
 
   $('#linkHomepage').addEventListener('click', (e) => {
     e.preventDefault();
@@ -287,22 +294,76 @@ function bindEvents() {
 }
 
 /* ---------------- 扫描 ---------------- */
+async function openDiskModal() {
+  $('#diskModal').classList.remove('hidden');
+  $('#diskList').innerHTML = '<div class="disk-empty">正在读取磁盘…</div>';
+  try {
+    const disks = await window.api.listDisks();
+    state.disks = disks;
+    renderDiskList(disks);
+  } catch (err) {
+    $('#diskList').innerHTML = `<div class="disk-empty">读取磁盘失败：${esc(err.message)}</div>`;
+  }
+}
+
+function closeDiskModal() {
+  $('#diskModal').classList.add('hidden');
+}
+
+function renderDiskList(disks) {
+  if (!disks.length) {
+    $('#diskList').innerHTML = '<div class="disk-empty">没有找到可扫描的磁盘</div>';
+    return;
+  }
+  $('#diskList').innerHTML = disks
+    .map((d) => {
+      const used = d.total ? Math.max(2, Math.round(((d.total - d.free) / d.total) * 100)) : 0;
+      const sys = d.letter.toUpperCase() === 'C' ? '（系统盘）' : '';
+      const sizeText = d.total ? `共 ${fmtSize(d.total)} · 可用 ${fmtSize(d.free)}` : '容量未知';
+      return `<button class="disk-item" data-root="${esc(d.root)}" type="button">
+        <span class="disk-icon">${esc(d.letter)}:</span>
+        <span class="disk-info">
+          <span class="disk-name">${esc(d.letter)}: 盘${sys}</span>
+          <span class="disk-meta">${sizeText}</span>
+          <span class="disk-bar"><span style="width:${used}%"></span></span>
+        </span>
+        <span class="btn btn-primary btn-sm">扫这个盘</span>
+      </button>`;
+    })
+    .join('');
+}
+
+async function quickScan() {
+  let p = state.appPaths;
+  if (!p || !p.desktop) {
+    try {
+      p = await window.api.appPaths();
+      state.appPaths = p;
+    } catch {
+      p = {};
+    }
+  }
+  const roots = [p.desktop, p.downloads, p.documents].filter(Boolean);
+  if (!roots.length) return toast('没找到常用文件夹，请用「扫描整个电脑」', true);
+  await scanRoots(roots, '桌面 + 下载 + 文档');
+}
+
 async function pickFolder() {
   const dir = await window.api.pickFolder();
   if (!dir) return;
-  $('#scanPath').value = dir;
-  doScan(dir);
+  await scanRoots([dir], '指定文件夹');
 }
 
-async function doScan(root) {
+async function scanRoots(roots, label) {
   if (state.busy) return;
   setBusy(true);
-  $('#statusText').textContent = '正在扫描…';
+  $('#statusText').textContent = `正在扫描${label}…`;
   try {
-    const scan = await window.api.scan({ root });
+    const scan = await window.api.scan({ roots });
     applyScan(scan);
-    toast(`扫描完成：${scan.summary.files} 个文件，用时 ${(scan.durationMs / 1000).toFixed(1)} 秒`);
-    if (scan.truncated) toast('文件数达到上限，结果可能不全。可调大「最大文件数」或缩小扫描范围。', true);
+    const s = scan.summary || {};
+    toast(`扫描完成：找到 ${s.files || 0} 个文件，用时 ${((scan.durationMs || 0) / 1000).toFixed(1)} 秒`);
+    if (scan.truncated) toast('文件太多，达到上限了。可以在设置里调大「最大文件数」。', true);
   } catch (err) {
     toast(`扫描失败：${err.message}`, true);
     $('#statusText').textContent = '扫描失败';
@@ -317,122 +378,124 @@ function applyScan(scan) {
   state.files = scan.files || [];
   state.selection.clear();
   state.currentId = null;
-  if (scan.root) $('#scanPath').value = scan.root;
   renderAll();
 }
 
+/* ---------------- 渲染 ---------------- */
 function renderAll() {
-  renderStats();
-  renderCharts();
+  renderNavStats();
+  renderViewSummary();
   renderTabsCounts();
   renderSourceFilter();
+  renderTableHead();
   renderList();
+  renderCharts();
   renderPreviewEmpty();
 }
 
-/* ---------------- 统计与图表 ---------------- */
-function renderStats() {
+function renderNavStats() {
   const s = state.scan && state.scan.summary;
   if (!s) {
-    $('#statFiles').textContent = '—';
-    $('#statSize').textContent = '—';
-    $('#statCleanable').textContent = '—';
-    $('#statDuplicate').textContent = '—';
+    $('#navStats').textContent = '还没有扫描';
     return;
   }
-  $('#statFiles').textContent = s.files;
-  $('#statFilesNote').textContent = state.scan.root ? `来自 ${shortPath(state.scan.root)}` : '扫描完成';
-  $('#statSize').textContent = fmtSize(s.size);
-  $('#statCleanable').textContent = fmtSize(s.cleanableSize);
-  $('#statDuplicate').textContent = fmtSize(s.duplicateSize || 0);
-  const ds = s.duplicateStats || {};
-  $('#statDuplicateNote').textContent = ds.groups ? `${ds.groups} 组重复 / 相似` : '没有发现重复';
+  $('#navStats').textContent = `共 ${s.files} 个 · ${fmtSize(s.size)} · 可清理 ${fmtSize(s.cleanableSize)}`;
 }
 
-function shortPath(p) {
-  const parts = String(p || '')
-    .split(/[\\/]/)
-    .filter(Boolean);
-  if (parts.length <= 2) return parts.join('\\');
-  const tail = parts.slice(-2).join('\\');
-  return tail.length > 26 ? `…${tail.slice(-25)}` : `…\\${tail}`;
+function baseViewFiles() {
+  if (state.view === 'knowledge') return state.files.filter((f) => (f.category && f.category.group) === 'knowledge');
+  if (state.view === 'tools') return state.files.filter((f) => (f.category && f.category.group) === 'tool');
+  if (state.view === 'duplicates') return state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate);
+  return state.files;
 }
 
-function renderCharts() {
+function topTags(list, n) {
+  const counts = new Map();
+  for (const f of list) {
+    const tags = (f.category && f.category.tags) || [];
+    for (const t of tags) {
+      if (String(t).length > 10) continue;
+      counts.set(t, (counts.get(t) || 0) + 1);
+    }
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n || 5)
+    .map(([t]) => t);
+}
+
+function renderViewSummary() {
+  const el = $('#viewSummary');
   const s = state.scan && state.scan.summary;
-  const sourceEl = $('#sourceChart');
-  const catEl = $('#categoryChart');
-
   if (!s) {
-    sourceEl.innerHTML = '<div class="chart-empty">扫描后显示</div>';
-    catEl.innerHTML = '<div class="chart-empty">扫描后显示</div>';
+    el.innerHTML = '先选一个位置，点「扫描整个电脑」或「一键扫常用位置」';
     return;
   }
 
-  const sources = (s.bySource || []).slice(0, 6);
-  const total = sources.reduce((n, x) => n + x.count, 0) || 1;
-  renderDonut(sourceEl, sources.map((x) => ({ label: x.name, value: x.count, color: x.color || '#94a3b8' })), total);
+  const all = state.files;
 
-  const cats = (s.byCategory || []).slice(0, 5);
-  const catMax = Math.max(...cats.map((x) => x.count), 1);
-  renderBars(catEl, cats.map((x) => ({
-    label: x.label,
-    value: x.count,
-    color: CAT_COLORS[x.key] || '#94a3b8',
-    ratio: x.count / catMax
-  })));
-}
-
-function renderDonut(container, items, total) {
-  if (!items.length) {
-    container.innerHTML = '<div class="chart-empty">没有数据</div>';
+  if (state.view === 'files') {
+    const keep = all.filter((f) => f.category && (f.category.group === 'knowledge' || f.category.group === 'tool')).length;
+    const clean = all.filter((f) => f.category && f.category.key === 'junk').length;
+    const groups = (s.duplicateStats && s.duplicateStats.groups) || 0;
+    el.innerHTML = `<div class="mini-stats">
+      <div class="mini-stat"><span class="ms-label">找到的文件</span><span class="ms-value">${all.length}</span><span class="ms-sub">${keep} 个建议留 · ${clean} 个可清理</span></div>
+      <div class="mini-stat"><span class="ms-label">占用空间</span><span class="ms-value">${fmtSize(s.size)}</span><span class="ms-sub">AI 产出合计</span></div>
+      <div class="mini-stat"><span class="ms-label">可以清理</span><span class="ms-value warn">${fmtSize(s.cleanableSize)}</span><span class="ms-sub">草稿 / 空洞 / 重复</span></div>
+      <div class="mini-stat"><span class="ms-label">重复可释放</span><span class="ms-value warn">${fmtSize(s.duplicateSize || 0)}</span><span class="ms-sub">${groups} 组重复</span></div>
+    </div>`;
     return;
   }
-  const R = 38;
-  const C = 2 * Math.PI * R;
-  let offset = 0;
-  const segs = items
-    .map((it) => {
-      const frac = it.value / total;
-      const dash = frac * C;
-      const seg = `<circle cx="48" cy="48" r="${R}" fill="none" stroke="${it.color}" stroke-width="14" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 48 48)"/>`;
-      offset += dash;
-      return seg;
-    })
-    .join('');
 
-  const legend = items
-    .map(
-      (it) => `<div class="legend-item"><span class="legend-dot" style="background:${it.color}"></span><span class="legend-name" title="${esc(it.label)}">${esc(it.label)}</span><span class="legend-val">${it.value}</span></div>`
-    )
-    .join('');
-
-  container.innerHTML = `<div class="donut-wrap">
-    <svg class="donut" viewBox="0 0 96 96" width="96" height="96">${segs}
-      <text x="48" y="47" text-anchor="middle" class="donut-center-num">${total}</text>
-      <text x="48" y="60" text-anchor="middle" class="donut-center-label">份文件</text>
-    </svg>
-    <div class="legend">${legend}</div>
-  </div>`;
-}
-
-function renderBars(container, items) {
-  if (!items.length) {
-    container.innerHTML = '<div class="chart-empty">没有数据</div>';
+  if (state.view === 'knowledge') {
+    const list = baseViewFiles();
+    const chars = list.reduce((n, f) => n + (f.chars || 0), 0);
+    const tags = topTags(list, 5);
+    el.innerHTML = `知识库里已经有 <b>${list.length}</b> 份资料，共约 <b>${chars.toLocaleString()}</b> 字${
+      tags.length ? `。常见主题：<b>${tags.map(esc).join('、')}</b>` : ''
+    }。`;
     return;
   }
-  container.innerHTML = `<div class="bars">${items
-    .map(
-      (it) => `<div class="bar-row">
-        <span class="bar-label" title="${esc(it.label)}">${esc(it.label)}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(3, it.ratio * 100).toFixed(1)}%;background:${it.color}"></div></div>
-        <span class="bar-val">${it.value}</span>
-      </div>`
-    )
-    .join('')}</div>`;
+
+  if (state.view === 'tools') {
+    const list = baseViewFiles();
+    const common = list.filter((f) => f.category && f.category.key === 'tool-common').length;
+    const onetime = list.filter((f) => f.category && f.category.key === 'tool-onetime').length;
+    const langs = new Map();
+    for (const f of list) {
+      const l = langOf(f.ext);
+      langs.set(l, (langs.get(l) || 0) + 1);
+    }
+    const langText = Array.from(langs.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([l, c]) => `${l} ${c}`)
+      .join(' · ');
+    el.innerHTML = `工具库里 <b>${list.length}</b> 个脚本：常用 <span class="ok">${common}</span> 个、一次性 <span class="warn">${onetime}</span> 个${
+      langText ? `。语言：${esc(langText)}` : ''
+    }。`;
+    return;
+  }
+
+  if (state.view === 'duplicates') {
+    const list = baseViewFiles();
+    const free = list.reduce((n, f) => n + (f.size || 0), 0);
+    const groups = (s.duplicateStats && s.duplicateStats.groups) || 0;
+    el.innerHTML = `发现 <b>${groups}</b> 组重复，共 <b>${list.length}</b> 个多余文件，处理掉能腾出 <span class="warn">${fmtSize(free)}</span>。`;
+  }
 }
 
-/* ---------------- 筛选与列表 ---------------- */
+function setView(view) {
+  state.view = view;
+  $$('.nav-tab').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  $('#categoryTabs').classList.toggle('hidden', view !== 'files');
+  if (view !== 'files') {
+    state.filter.cat = 'all';
+    $$('#categoryTabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.cat === 'all'));
+  }
+  renderAll();
+}
+
 function catMatch(file, cat) {
   if (cat === 'all') return true;
   if (cat === 'dup') return !!(file.duplicate && file.duplicate.isDuplicate);
@@ -444,16 +507,12 @@ function renderTabsCounts() {
   const files = state.files;
   const count = (g) => files.filter((f) => ((f.category && f.category.group) || 'other') === g).length;
   const dupCount = files.filter((f) => f.duplicate && f.duplicate.isDuplicate).length;
-  renderTabs(files.length, count('knowledge'), count('tool'), count('junk'), dupCount, count('other'));
-}
-
-function renderTabs(all, k, t, j, dup, o) {
-  $('#tabCountAll').textContent = all;
-  $('#tabCountKnowledge').textContent = k;
-  $('#tabCountTool').textContent = t;
-  $('#tabCountJunk').textContent = j;
-  $('#tabCountDup').textContent = dup;
-  $('#tabCountOther').textContent = o;
+  $('#tabCountAll').textContent = files.length;
+  $('#tabCountKnowledge').textContent = count('knowledge');
+  $('#tabCountTool').textContent = count('tool');
+  $('#tabCountJunk').textContent = count('junk');
+  $('#tabCountDup').textContent = dupCount;
+  $('#tabCountOther').textContent = count('other');
 }
 
 function renderSourceFilter() {
@@ -470,17 +529,25 @@ function renderSourceFilter() {
   sel.innerHTML = opts.join('');
   if (state.filter.source !== 'all' && !(s.bySource || []).some((x) => x.id === state.filter.source)) {
     state.filter.source = 'all';
-    sel.value = 'all';
-  } else {
-    sel.value = state.filter.source;
   }
+  sel.value = state.filter.source;
+}
+
+function renderTableHead() {
+  const cols = VIEW_COLUMNS[state.view] || VIEW_COLUMNS.files;
+  $('#tableHead').innerHTML = cols.map((c) => `<span>${esc(c)}</span>`).join('');
 }
 
 function computeFiltered() {
-  const { cat, source, q, sort } = state.filter;
-  let list = state.files.filter((f) => catMatch(f, cat));  if (source !== 'all') list = list.filter((f) => f.source && f.source.id === source);
-  if (q) {
-    const needle = q.toLowerCase();
+  let list = baseViewFiles();
+  if (state.view === 'files' && state.filter.cat !== 'all') {
+    list = list.filter((f) => catMatch(f, state.filter.cat));
+  }
+  if (state.filter.source !== 'all') {
+    list = list.filter((f) => f.source && f.source.id === state.filter.source);
+  }
+  if (state.filter.q) {
+    const needle = state.filter.q.toLowerCase();
     list = list.filter((f) => {
       const hay = [
         f.name,
@@ -500,9 +567,60 @@ function computeFiltered() {
     size: (a, b) => b.size - a.size,
     name: (a, b) => a.name.localeCompare(b.name, 'zh-CN'),
     chars: (a, b) => (b.chars || 0) - (a.chars || 0)
-  }[sort] || ((a, b) => b.mtime - a.mtime);
+  }[state.filter.sort] || ((a, b) => b.mtime - a.mtime);
 
   return list.sort(cmp);
+}
+
+function rowCells(f) {
+  const cat = f.category || { key: 'other', label: '其他', retention: '按需留存' };
+  const extLabel = (f.ext || '').replace('.', '').slice(0, 5) || 'FILE';
+  const dup = f.duplicate && f.duplicate.isDuplicate;
+
+  const nameCell = `<div class="fname">
+    <span class="fext ${esc((f.ext || '').replace('.', ''))}">${esc(extLabel)}</span>
+    <span class="fname-text" title="${esc(f.name)}">${esc(f.name)}</span>
+    ${dup ? '<span class="dup-flag">重复</span>' : ''}
+  </div>`;
+
+  if (state.view === 'knowledge') {
+    const tags = (cat.tags || []).slice(0, 2);
+    return {
+      name: nameCell,
+      c3: tags.length
+        ? tags.map((t) => `<span class="tag-chip" title="${esc(t)}">${esc(t)}</span>`).join('')
+        : '<span class="cell-text">—</span>',
+      c4: `<span class="cell-num">${(f.chars || 0).toLocaleString()} 字</span>`
+    };
+  }
+
+  if (state.view === 'tools') {
+    return {
+      name: nameCell,
+      c3: `<span class="cat-badge cat-${esc(cat.key)}">${esc(cat.key === 'tool-common' ? '常用工具' : '一次性脚本')}</span>`,
+      c4: `<span class="cell-text">${esc(langOf(f.ext))}</span>`
+    };
+  }
+
+  if (state.view === 'duplicates') {
+    const sim = dup ? Math.round((f.duplicate.similarity || 1) * 100) : 100;
+    return {
+      name: nameCell,
+      c3: `<span class="cell-num">${f.duplicate && f.duplicate.kind === 'exact' ? '完全相同' : `${sim}% 相似`}</span>`,
+      c4: `<span class="cell-text" title="${esc((f.duplicate && f.duplicate.withName) || '')}">${esc(
+        (f.duplicate && f.duplicate.withName) || '—'
+      )}</span>`
+    };
+  }
+
+  // files
+  return {
+    name: nameCell,
+    c3: `<div class="source-badge"><span class="source-dot" style="background:${esc(
+      (f.source && f.source.color) || '#94a3b8'
+    )}"></span><span class="source-name">${esc((f.source && f.source.name) || '未识别')}</span></div>`,
+    c4: `<span class="cat-badge cat-${esc(cat.key)}">${esc(cat.label || '其他')}</span>`
+  };
 }
 
 function renderList() {
@@ -530,23 +648,14 @@ function renderList() {
     if (state.currentId === f.id) row.classList.add('selected');
     if (state.selection.has(f.id)) row.classList.add('checked');
 
-    const cat = f.category || { key: 'other', label: '其他', retention: '按需留存', reason: '' };
-    const catClass = `cat-${cat.key}`;
-    const retentionClass =
-      cat.key === 'junk' ? 'clean' : cat.key === 'knowledge' ? 'keep' : cat.key === 'tool-onetime' ? 'archive' : '';
-    const extLabel = (f.ext || '').replace('.', '').slice(0, 5) || 'FILE';
-    const dup = f.duplicate && f.duplicate.isDuplicate;
-
+    const cells = rowCells(f);
     row.innerHTML = `
-      <span class="col-check"><input type="checkbox" data-id="${esc(f.id)}" ${state.selection.has(f.id) ? 'checked' : ''}></span>
-      <div class="fname">
-        <span class="fext ${esc((f.ext || '').replace('.', ''))}">${esc(extLabel)}</span>
-        <span class="fname-text" title="${esc(f.name)}">${esc(f.name)}</span>
-        ${dup ? '<span class="dup-flag">重复</span>' : ''}
-      </div>
-      <div class="source-badge"><span class="source-dot" style="background:${esc((f.source && f.source.color) || '#94a3b8')}"></span><span class="source-name">${esc((f.source && f.source.name) || '未识别')}</span></div>
-      <div><span class="cat-badge ${esc(catClass)}">${esc(cat.label || '其他')}</span></div>
-      <div class="retention-text ${retentionClass}" title="${esc(cat.reason || '')}">${esc(cat.retention || '')}</div>
+      <span class="col-check"><input type="checkbox" data-id="${esc(f.id)}" ${
+      state.selection.has(f.id) ? 'checked' : ''
+    }></span>
+      ${cells.name}
+      ${cells.c3}
+      ${cells.c4}
       <div class="size-text">${fmtSize(f.size)}</div>
       <div class="path-text" title="${esc(f.path)}">${esc(f.path)}</div>
     `;
@@ -559,12 +668,12 @@ function renderList() {
   if (!state.filtered.length) {
     const tip = document.createElement('div');
     tip.className = 'empty-state list-tip';
-    tip.innerHTML = '<h3>这个筛选下没有文件</h3><p>换个分类、来源或清掉搜索词看看。</p>';
+    tip.innerHTML = '<h3>这个筛选下没有文件</h3><p>换个分类、来源，或者清掉搜索词看看。</p>';
     listEl.appendChild(tip);
   } else if (state.filtered.length > MAX_RENDER) {
     const tip = document.createElement('div');
     tip.className = 'list-tip';
-    tip.style.cssText = 'padding:12px 16px;font-size:11.5px;color:#98a2b3;text-align:center;';
+    tip.style.cssText = 'padding:12px 16px;font-size:12px;color:#98a2b3;text-align:center;';
     tip.textContent = `共 ${state.filtered.length} 个文件，为保证流畅只显示前 ${MAX_RENDER} 个。用搜索或筛选缩小范围。`;
     listEl.appendChild(tip);
   }
@@ -615,8 +724,13 @@ async function selectFile(id) {
     `<span class="meta-chip">修改 <b>${fmtTime(f.mtime)}</b></span>`
   ];
   if (f.duplicate && f.duplicate.isDuplicate) {
-    chips.push(`<span class="meta-chip" style="color:#dc2626;border-color:#f6d5d5;background:#fef2f2">重复 · 保留版本：<b>${esc(f.duplicate.withName || '')}</b></span>`);
+    chips.push(
+      `<span class="meta-chip" style="color:#dc2626;border-color:#f6d5d5;background:#fef2f2">重复 · 保留：<b>${esc(
+        f.duplicate.withName || ''
+      )}</b></span>`
+    );
   }
+  if (f.aiSummary) chips.push(`<span class="meta-chip" style="color:#4338ca">摘要 <b>${esc(f.aiSummary)}</b></span>`);
   $('#previewMeta').innerHTML = chips.join('');
 
   $('#previewText').textContent = '读取中…';
@@ -627,12 +741,235 @@ async function selectFile(id) {
   } else {
     $('#previewText').textContent = (r && r.error) || '无法预览';
   }
-
-  markCurrentRow();
 }
 
-function markCurrentRow() {
-  $$('#fileList .file-row').forEach((r) => r.classList.toggle('selected', r.dataset.id === state.currentId));
+/* ---------------- 归档 / 一键整理 / 导出 / 清理 ---------------- */
+function selectedPaths() {
+  return state.files.filter((f) => state.selection.has(f.id)).map((f) => f.path);
+}
+
+async function ensureArchiveRoot() {
+  let root = state.config && state.config.archiveRoot;
+  if (root) return root;
+  const docs = (state.appPaths && state.appPaths.documents) || '';
+  if (!docs) return '';
+  root = `${docs}\\AI产出管家归档`;
+  try {
+    await window.api.configPatch({ archiveRoot: root });
+    state.config = await window.api.configGet();
+  } catch {
+    /* 保存失败也让本次整理继续用这个目录 */
+  }
+  return root;
+}
+
+function archiveMode() {
+  return (state.config && state.config.archiveMode) === 'copy' ? 'copy' : 'move';
+}
+
+async function doArchive() {
+  const paths = selectedPaths();
+  if (!paths.length) return toast('先在左边勾选要归档的文件', true);
+  const root = await ensureArchiveRoot();
+  if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
+  const mode = archiveMode();
+  const tip =
+    mode === 'copy'
+      ? `把 ${paths.length} 个文件【复制】到：\n${root}\n\n原文件会留着。确定吗？`
+      : `把 ${paths.length} 个文件【移动】到：\n${root}\n\n原位置不再保留，会按分类建文件夹。确定吗？`;
+  if (!window.confirm(tip)) return;
+
+  try {
+    const r = await window.api.archive({ paths, targetDir: root, mode });
+    removeFromState(mode === 'move' ? r.done || [] : []);
+    toast(`归档完成：成功 ${r.ok} 个，失败 ${r.failed.length} 个。`);
+  } catch (err) {
+    toast(`归档失败：${err.message}`, true);
+  }
+}
+
+async function archiveCurrent() {
+  const f = currentFile();
+  if (!f) return;
+  const root = await ensureArchiveRoot();
+  if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
+  try {
+    const r = await window.api.archive({ paths: [f.path], targetDir: root, mode: archiveMode() });
+    if (r.ok) {
+      removeFromState(r.done || []);
+      toast('这个文件已经归档好了');
+    } else {
+      toast('归档失败：' + ((r.failed[0] && r.failed[0].error) || '未知原因'), true);
+    }
+  } catch (err) {
+    toast(`归档失败：${err.message}`, true);
+  }
+}
+
+async function doOneClickOrganize() {
+  if (!state.files.length) return toast('先扫描一次再整理', true);
+
+  const keep = state.files.filter(
+    (f) => f.category && (f.category.group === 'knowledge' || f.category.group === 'tool')
+  );
+  const trashMap = new Map();
+  for (const f of state.files) {
+    if ((f.category && f.category.key === 'junk') || (f.duplicate && f.duplicate.isDuplicate)) {
+      trashMap.set(f.path, f);
+    }
+  }
+  const keepList = keep.filter((f) => !trashMap.has(f.path));
+  const trashList = Array.from(trashMap.values());
+
+  if (!keepList.length && !trashList.length) return toast('没有需要整理的文件，挺干净的');
+
+  const root = await ensureArchiveRoot();
+  if (!root) return toast('没有找到归档目录，请到设置里选一个', true);
+
+  const ok = window.confirm(
+    `管家准备这样做：\n\n` +
+      `① 把 ${keepList.length} 个「值得留的知识 / 能用的工具」移动到：\n${root}\n\n` +
+      `② 把 ${trashList.length} 个「可以删的 / 重复的」移到回收站（还能找回）\n\n` +
+      `确定就点「确定」，不确定就点「取消」。`
+  );
+  if (!ok) return;
+
+  setBusy(true);
+  let archived = 0;
+  let trashed = 0;
+  try {
+    if (keepList.length) {
+      const r = await window.api.archive({
+        paths: keepList.map((f) => f.path),
+        targetDir: root,
+        mode: archiveMode()
+      });
+      archived = r.ok;
+      removeFromState(archiveMode() === 'move' ? r.done || [] : [], false);
+    }
+    if (trashList.length) {
+      const r = await window.api.cleanupTrash({ paths: trashList.map((f) => f.path) });
+      trashed = r.ok;
+      if (r.done) removeFromState(r.done, false);
+    }
+    renderAll();
+    toast(`整理完成：${archived} 个归档，${trashed} 个移到回收站。回收站里还能找回。`);
+  } catch (err) {
+    toast(`整理失败：${err.message}`, true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function removeFromState(doneList, rerender = true) {
+  if (!Array.isArray(doneList) || !doneList.length) return;
+  const moved = new Set(doneList.map((d) => d.path));
+  state.files = state.files.filter((f) => !moved.has(f.path));
+  state.selection.clear();
+  if (state.currentId && !state.files.some((f) => f.id === state.currentId)) {
+    state.currentId = null;
+    renderPreviewEmpty();
+  }
+  if (state.scan) {
+    state.scan.files = state.files;
+    state.scan.summary = recomputeSummary();
+  }
+  if (rerender) renderAll();
+}
+
+async function doExport() {
+  if (!state.files.length) return toast('还没有扫描结果', true);
+  const paths = selectedPaths();
+  const list = paths.length ? state.files.filter((f) => state.selection.has(f.id)) : state.filtered;
+  if (!list.length) return toast('当前没有可导出的文件', true);
+  try {
+    const out = await window.api.pickSave({
+      title: '导出清单',
+      defaultName: paths.length ? 'AI产出清单_选中.md' : 'AI产出清单.md',
+      filters: [
+        { name: 'Markdown 表格', extensions: ['md'] },
+        { name: 'CSV（Excel 可打开）', extensions: ['csv'] }
+      ]
+    });
+    if (!out) return;
+    const format = out.toLowerCase().endsWith('.csv') ? 'csv' : 'md';
+    const saved = await window.api.exportRun({ format, paths: list.map((f) => f.path), outPath: out });
+    toast(`已导出：${saved}`);
+  } catch (err) {
+    toast(`导出失败：${err.message}`, true);
+  }
+}
+
+async function doCleanDuplicates() {
+  const dups = state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate);
+  if (!dups.length) return toast('没有发现重复或高度相似的文件');
+  const size = dups.reduce((s, f) => s + f.size, 0);
+  const ok = window.confirm(
+    `发现 ${dups.length} 个重复/相似文件，可释放约 ${fmtSize(size)}。\n\n` +
+      `会把每组里多余的移到回收站，每组保留最完整的一份。\n\n确定吗？`
+  );
+  if (!ok) return;
+
+  try {
+    const r = await window.api.removeDuplicates({ paths: dups.map((f) => f.path), toTrash: true });
+    removeFromState(r.done || dups.map((f) => ({ path: f.path })));
+    toast(`已移入回收站 ${r.ok} 个，释放约 ${fmtSize(size)}`);
+  } catch (err) {
+    toast(`清理失败：${err.message}`, true);
+  }
+}
+
+async function openTrash() {
+  try {
+    const dir = await window.api.openTrash();
+    toast(`已打开回收站：${dir}`);
+  } catch (err) {
+    toast(`打开回收站失败：${err.message}`, true);
+  }
+}
+
+function recomputeSummary() {
+  const files = state.files;
+  const bySource = {};
+  const byCategory = {};
+  let size = 0;
+  let cleanableSize = 0;
+  let duplicateSize = 0;
+
+  for (const f of files) {
+    size += f.size;
+    const sid = (f.source && f.source.id) || 'unknown';
+    if (!bySource[sid]) {
+      bySource[sid] = {
+        id: sid,
+        name: (f.source && f.source.name) || '未识别',
+        color: (f.source && f.source.color) || '#94a3b8',
+        count: 0,
+        size: 0
+      };
+    }
+    bySource[sid].count += 1;
+    bySource[sid].size += f.size;
+
+    const ck = (f.category && f.category.key) || 'other';
+    if (!byCategory[ck]) {
+      byCategory[ck] = { key: ck, label: (f.category && f.category.label) || '其他', count: 0, size: 0 };
+    }
+    byCategory[ck].count += 1;
+    byCategory[ck].size += f.size;
+    if (ck === 'junk') cleanableSize += f.size;
+    if (f.duplicate && f.duplicate.isDuplicate) duplicateSize += f.size;
+  }
+
+  return {
+    files: files.length,
+    size,
+    cleanableSize,
+    duplicateSize,
+    bySource: Object.values(bySource).sort((a, b) => b.size - a.size),
+    byCategory: Object.values(byCategory).sort((a, b) => b.size - a.size),
+    duplicateStats: { groups: 0, exactFiles: 0, similarFiles: 0, freeableSize: duplicateSize }
+  };
 }
 
 /* ---------------- AI ---------------- */
@@ -675,7 +1012,9 @@ async function runAi(kind) {
     } else if (kind === 'tags') {
       const r = await window.api.aiTags({ path: f.path });
       box.innerHTML = `<b>内容标签：</b>${r.tags.map((t) => `<span class="meta-chip">${esc(t)}</span>`).join(' ')}
-        <div style="margin-top:8px"><button class="btn btn-primary btn-sm" data-ai-action="tags" data-value="${esc(r.tags.join(','))}">保存标签</button></div>`;
+        <div style="margin-top:8px"><button class="btn btn-primary btn-sm" data-ai-action="tags" data-value="${esc(
+          r.tags.join(',')
+        )}">保存标签</button></div>`;
     } else if (kind === 'category') {
       const r = await window.api.aiCategory({ path: f.path });
       const map = {
@@ -688,7 +1027,9 @@ async function runAi(kind) {
         ? `<b>AI 复核结果：</b>${esc(map[r.category] || r.category)}
            <div style="margin-top:8px">
              <button class="btn btn-primary btn-sm" data-ai-action="category" data-value="${esc(r.category)}">应用此分类</button>
-             <span style="font-size:11px;color:#7c7fb0;margin-left:6px">当前是「${esc(f.category ? f.category.label : '—')}」</span>
+             <span style="font-size:11px;color:#7c7fb0;margin-left:6px">当前是「${esc(
+               f.category ? f.category.label : '—'
+             )}」</span>
            </div>`
         : 'AI 没给出明确分类，保持原判。';
     }
@@ -697,11 +1038,46 @@ async function runAi(kind) {
     box.style.borderColor = '#f3c9c9';
     box.style.background = '#fef2f2';
     box.style.color = '#b91c1c';
-    setTimeout(() => {
-      box.style.borderColor = '';
-      box.style.background = '';
-      box.style.color = '';
-    }, 4000);
+  }
+}
+
+async function onAiAction(e) {
+  const btn = e.target.closest('[data-ai-action]');
+  if (!btn) return;
+  const f = currentFile();
+  if (!f) return;
+  const action = btn.dataset.aiAction;
+
+  try {
+    if (action === 'rename') {
+      const newName = btn.dataset.value;
+      if (!window.confirm(`把「${f.name}」改名为「${newName}」？\n\n只改文件名，不动内容。`)) return;
+      const r = await window.api.renameFile({ path: f.path, name: newName });
+      f.name = r.name;
+      f.path = r.path;
+      f.ext = (r.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+      toast(`已改名为：${r.name}`);
+      renderList();
+      selectFile(f.id);
+    } else if (action === 'tags') {
+      const tags = btn.dataset.value.split(',').map((s) => s.trim()).filter(Boolean);
+      await window.api.aiApplyTags({ path: f.path, tags });
+      if (!f.category) {
+        f.category = { key: 'other', group: 'other', label: '其他文件', retention: '按需留存', reason: '', tags: [] };
+      }
+      f.category.tags = tags;
+      toast('标签已保存');
+      renderList();
+      selectFile(f.id);
+    } else if (action === 'category') {
+      const r = await window.api.aiApplyCategory({ path: f.path, category: btn.dataset.value });
+      f.category = r.category;
+      toast(`已改成：${r.category.label}`);
+      renderAll();
+      selectFile(f.id);
+    }
+  } catch (err) {
+    toast(`操作失败：${err.message}`, true);
   }
 }
 
@@ -778,10 +1154,8 @@ async function testAi() {
   st.textContent = '测试中…';
   st.className = 'inline-status';
   try {
-    const baseUrl = $('#setAiBaseUrl').value.trim();
-    const model = $('#setAiModel').value.trim();
+    const cfg = { baseUrl: $('#setAiBaseUrl').value.trim(), model: $('#setAiModel').value.trim() };
     const keyInput = $('#setAiKey').value.trim();
-    const cfg = { baseUrl, model };
     if (keyInput) cfg.apiKey = keyInput;
     const r = await window.api.aiTest(cfg);
     st.textContent = `连上了，模型回复：${r.reply || 'OK'}`;
@@ -790,141 +1164,6 @@ async function testAi() {
     st.textContent = `连不上：${err.message}`;
     st.className = 'inline-status err';
   }
-}
-
-/* ---------------- 归档 / 导出 / 清理 ---------------- */
-function selectedPaths() {
-  return state.files.filter((f) => state.selection.has(f.id)).map((f) => f.path);
-}
-
-async function doArchive() {
-  const paths = selectedPaths();
-  if (!paths.length) return toast('先在左边勾选要归档的文件', true);
-  const root = state.config && state.config.archiveRoot;
-  if (!root) {
-    toast('还没设归档目录。打开设置 → 常规，选一个默认归档路径。');
-    openSettings();
-    return;
-  }
-  const mode = (state.config && state.config.archiveMode) === 'copy' ? 'copy' : 'move';
-  const tip =
-    mode === 'copy'
-      ? `确定把 ${paths.length} 个文件【复制】到归档目录？原文件会留着。`
-      : `确定把 ${paths.length} 个文件【剪切】到归档目录？\n\n原位置不再保留，会按分类自动建子文件夹。`;
-  if (!window.confirm(tip)) return;
-
-  try {
-    const r = await window.api.archive({ paths, targetDir: root, mode });
-
-    // 剪切归档后，文件已经不在原位置了，列表要跟着更新，别留着一堆点开就报错的旧条目
-    if (mode === 'move' && Array.isArray(r.done)) {
-      const moved = new Set(r.done.map((d) => d.path));
-      state.files = state.files.filter((f) => !moved.has(f.path));
-      state.selection.clear();
-      if (state.currentId && !state.files.some((f) => f.id === state.currentId)) {
-        state.currentId = null;
-        renderPreviewEmpty();
-      }
-      if (state.scan) {
-        state.scan.files = state.files;
-        state.scan.summary = recomputeSummary();
-      }
-      renderAll();
-    }
-
-    toast(`归档完成：成功 ${r.ok} 个，失败 ${r.failed.length} 个。${mode === 'copy' ? '原文件仍在原位置。' : '原位置的已移走。'}`);
-    $('#statusText').textContent = `已归档到 ${root}`;
-  } catch (err) {
-    toast(`归档失败：${err.message}`, true);
-  }
-}
-
-async function doExport() {
-  if (!state.files.length) return toast('还没有扫描结果', true);
-  const paths = selectedPaths();
-  const defaultName = paths.length ? 'AI工件清单_选中.md' : 'AI工件清单.md';
-  try {
-    const out = await window.api.pickSave({
-      title: '导出清单',
-      defaultName,
-      filters: [
-        { name: 'Markdown 表格', extensions: ['md'] },
-        { name: 'CSV（Excel 可打开）', extensions: ['csv'] }
-      ]
-    });
-    if (!out) return;
-    const format = out.toLowerCase().endsWith('.csv') ? 'csv' : 'md';
-    const saved = await window.api.exportRun({ format, paths, outPath: out });
-    toast(`已导出：${saved}`);
-  } catch (err) {
-    toast(`导出失败：${err.message}`, true);
-  }
-}
-
-async function doCleanDuplicates() {
-  const dups = state.files.filter((f) => f.duplicate && f.duplicate.isDuplicate);
-  if (!dups.length) return toast('没有发现重复或高度相似的文件');
-  const size = dups.reduce((s, f) => s + f.size, 0);
-  const ok = window.confirm(
-    `发现 ${dups.length} 个重复/相似文件，可释放约 ${fmtSize(size)}。\n\n` +
-      `确定要把它们移到软件回收站吗？（不会直接永久删除，之后可从软件的 trash 目录找回）`
-  );
-  if (!ok) return;
-
-  try {
-    const r = await window.api.removeDuplicates({ paths: dups.map((f) => f.path), toTrash: true });
-    const removed = new Set(dups.map((f) => f.path));
-    state.files = state.files.filter((f) => !removed.has(f.path));
-    state.selection.clear();
-    if (state.currentId && !state.files.some((f) => f.id === state.currentId)) {
-      state.currentId = null;
-      renderPreviewEmpty();
-    }
-    if (state.scan) {
-      state.scan.files = state.files;
-      state.scan.summary = recomputeSummary();
-    }
-    renderAll();
-    toast(`已移入回收站 ${r.ok} 个，释放 ${fmtSize(size)}`);
-  } catch (err) {
-    toast(`清理失败：${err.message}`, true);
-  }
-}
-
-function recomputeSummary() {
-  const files = state.files;
-  const bySource = {};
-  const byCategory = {};
-  let size = 0;
-  let cleanableSize = 0;
-  let duplicateSize = 0;
-
-  for (const f of files) {
-    size += f.size;
-    const sid = (f.source && f.source.id) || 'unknown';
-    if (!bySource[sid]) {
-      bySource[sid] = { id: sid, name: (f.source && f.source.name) || '未识别', color: (f.source && f.source.color) || '#94a3b8', count: 0, size: 0 };
-    }
-    bySource[sid].count += 1;
-    bySource[sid].size += f.size;
-
-    const ck = (f.category && f.category.key) || 'other';
-    if (!byCategory[ck]) byCategory[ck] = { key: ck, label: (f.category && f.category.label) || '其他', count: 0, size: 0 };
-    byCategory[ck].count += 1;
-    byCategory[ck].size += f.size;
-    if (ck === 'junk') cleanableSize += f.size;
-    if (f.duplicate && f.duplicate.isDuplicate) duplicateSize += f.size;
-  }
-
-  return {
-    files: files.length,
-    size,
-    cleanableSize,
-    duplicateSize,
-    bySource: Object.values(bySource).sort((a, b) => b.size - a.size),
-    byCategory: Object.values(byCategory).sort((a, b) => b.size - a.size),
-    duplicateStats: { groups: 0, exactFiles: 0, similarFiles: 0, freeableSize: duplicateSize }
-  };
 }
 
 /* ---------------- 设置 ---------------- */
@@ -936,14 +1175,16 @@ async function openSettings() {
   $('#setArchiveMode').value = c.archiveMode || 'move';
   $('#setMaxDepth').value = c.maxDepth || 14;
   $('#setMaxFiles').value = c.maxFiles || 50000;
-  $('#setWhitelist').value = (c.whitelist || [])
-    .map((w) => w.value)
-    .join('\n');
+
+  const wl = c.whitelist || [];
+  $('#setWhitelist').value = wl.filter((w) => !w.builtin).map((w) => w.value).join('\n');
+  renderBuiltinWhitelist(wl.filter((w) => w.builtin));
 
   $('#setAiBaseUrl').value = (c.ai && c.ai.baseUrl) || '';
   $('#setAiModel').value = (c.ai && c.ai.model) || '';
   $('#setAiKey').value = '';
-  $('#setAiKey').placeholder = c.ai && c.ai.hasKey ? `已保存（${c.ai.apiKeyMasked || '****'}），留空不改` : 'sk-...（只存本机）';
+  $('#setAiKey').placeholder =
+    c.ai && c.ai.hasKey ? `已保存（${c.ai.apiKeyMasked || '****'}），留空不改` : 'sk-...（只存本机）';
 
   $('#settingsModal').classList.remove('hidden');
   refreshCtxStatus();
@@ -954,15 +1195,26 @@ function closeSettings() {
   $('#settingsModal').classList.add('hidden');
 }
 
+function renderBuiltinWhitelist(items) {
+  const paths = items.filter((i) => i.type === 'path').map((i) => i.value);
+  const exts = items.filter((i) => i.type === 'ext').map((i) => i.value);
+  $('#builtinList').innerHTML = `
+    <div class="builtin-group"><b>不会扫的目录（${paths.length}）</b><br>${paths.map(esc).join('<br>')}</div>
+    <div class="builtin-group"><b>不会扫的文件类型（${exts.length}）</b><br>${exts.map(esc).join(' ')}</div>
+  `;
+}
+
 async function saveGeneral() {
   const raw = $('#setWhitelist').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  const whitelist = raw.map((v) => ({ type: v.startsWith('.') ? 'ext' : 'path', value: v }));
+  const custom = raw.map((v) => ({ type: v.startsWith('.') ? 'ext' : 'path', value: v, builtin: false }));
+  const builtin = ((state.config && state.config.whitelist) || []).filter((w) => w.builtin);
+
   const patch = {
     archiveRoot: $('#setArchiveRoot').value.trim(),
-    archiveMode: $('#setArchiveMode').value === 'move' ? 'move' : 'copy',
+    archiveMode: $('#setArchiveMode').value === 'copy' ? 'copy' : 'move',
     maxDepth: Number($('#setMaxDepth').value) || 14,
     maxFiles: Number($('#setMaxFiles').value) || 50000,
-    whitelist
+    whitelist: [...builtin, ...custom]
   };
   try {
     await window.api.configPatch(patch);
@@ -1033,6 +1285,120 @@ async function copyMcpConfig() {
   } catch {
     toast('复制失败，可以手动选中文本复制', true);
   }
+}
+
+/* ---------------- 统计 ---------------- */
+function openStats() {
+  renderStats();
+  renderCharts();
+  $('#statsModal').classList.remove('hidden');
+}
+
+function closeStats() {
+  $('#statsModal').classList.add('hidden');
+}
+
+function renderStats() {
+  const s = state.scan && state.scan.summary;
+  if (!s) {
+    $('#statFiles').textContent = '—';
+    $('#statSize').textContent = '—';
+    $('#statCleanable').textContent = '—';
+    $('#statDuplicate').textContent = '—';
+    return;
+  }
+  $('#statFiles').textContent = s.files;
+  $('#statSize').textContent = fmtSize(s.size);
+  $('#statCleanable').textContent = fmtSize(s.cleanableSize);
+  $('#statDuplicate').textContent = fmtSize(s.duplicateSize || 0);
+  const ds = s.duplicateStats || {};
+  $('#statDuplicateNote').textContent = ds.groups ? `${ds.groups} 组重复 / 相似` : '没有发现重复';
+}
+
+function renderCharts() {
+  const s = state.scan && state.scan.summary;
+  const sourceEl = $('#sourceChart');
+  const catEl = $('#categoryChart');
+  if (!sourceEl || !catEl) return;
+
+  if (!s) {
+    sourceEl.innerHTML = '<div class="chart-empty">扫描后显示</div>';
+    catEl.innerHTML = '<div class="chart-empty">扫描后显示</div>';
+    return;
+  }
+
+  const sources = (s.bySource || []).slice(0, 6);
+  const total = sources.reduce((n, x) => n + x.count, 0) || 1;
+  renderDonut(sourceEl, sources.map((x) => ({ label: x.name, value: x.count, color: x.color || '#94a3b8' })), total);
+
+  const cats = (s.byCategory || []).slice(0, 5);
+  const catMax = Math.max(...cats.map((x) => x.count), 1);
+  renderBars(
+    catEl,
+    cats.map((x) => ({
+      label: x.label,
+      value: x.count,
+      color: CAT_COLORS[x.key] || '#94a3b8',
+      ratio: x.count / catMax
+    }))
+  );
+}
+
+function renderDonut(container, items, total) {
+  if (!items.length) {
+    container.innerHTML = '<div class="chart-empty">没有数据</div>';
+    return;
+  }
+  const R = 38;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+  const segs = items
+    .map((it) => {
+      const frac = it.value / total;
+      const dash = frac * C;
+      const seg = `<circle cx="48" cy="48" r="${R}" fill="none" stroke="${it.color}" stroke-width="14" stroke-dasharray="${dash.toFixed(
+        2
+      )} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(
+        2
+      )}" transform="rotate(-90 48 48)"/>`;
+      offset += dash;
+      return seg;
+    })
+    .join('');
+
+  const legend = items
+    .map(
+      (it) => `<div class="legend-item"><span class="legend-dot" style="background:${it.color}"></span><span class="legend-name" title="${esc(
+        it.label
+      )}">${esc(it.label)}</span><span class="legend-val">${it.value}</span></div>`
+    )
+    .join('');
+
+  container.innerHTML = `<div class="donut-wrap">
+    <svg class="donut" viewBox="0 0 96 96" width="108" height="108">${segs}
+      <text x="48" y="47" text-anchor="middle" class="donut-center-num">${total}</text>
+      <text x="48" y="60" text-anchor="middle" class="donut-center-label">份文件</text>
+    </svg>
+    <div class="legend">${legend}</div>
+  </div>`;
+}
+
+function renderBars(container, items) {
+  if (!items.length) {
+    container.innerHTML = '<div class="chart-empty">没有数据</div>';
+    return;
+  }
+  container.innerHTML = `<div class="bars">${items
+    .map(
+      (it) => `<div class="bar-row">
+        <span class="bar-label" title="${esc(it.label)}">${esc(it.label)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(3, it.ratio * 100).toFixed(
+          1
+        )}%;background:${it.color}"></div></div>
+        <span class="bar-val">${it.value}</span>
+      </div>`
+    )
+    .join('')}</div>`;
 }
 
 /* ---------------- 启动 ---------------- */
