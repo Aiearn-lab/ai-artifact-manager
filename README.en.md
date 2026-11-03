@@ -20,7 +20,7 @@
 
 ## Download
 
-**[⬇ AI Artifact Manager 0.5.0 (Windows 64-bit, 96 MB)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.5.1-portable.exe)**
+**[⬇ AI Artifact Manager 0.5.0 (Windows 64-bit, 96 MB)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest/download/AI-Artifact-Manager-0.5.2-portable.exe)**
 
 Portable — double-click and it runs. No installer, no account, no telemetry.
 Settings and data live in an `AI产出管家数据` folder next to the exe; move that folder to move your setup.
