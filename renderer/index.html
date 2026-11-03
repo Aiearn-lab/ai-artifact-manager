@@ -8,6 +8,14 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- 启动画面：加载时显示品牌和官网，初始化完自动淡出 -->
+  <div class="splash" id="splash">
+    <div class="splash-mark">AI</div>
+    <h1>AI产出管家</h1>
+    <p class="splash-sub">专门管理 AI 生成的文件</p>
+    <p class="splash-brand">智维工作室 · Zhiwei Studio</p>
+    <p class="splash-url">www.zhiweistudio.com.cn</p>
+  </div>
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -175,7 +183,7 @@
       <span class="status-right">
         <a href="#" id="linkHomepage">智维工作室 · zhiweistudio.com.cn</a>
         <span class="dot">·</span>
-        <span id="statusVersion">v0.4.1</span>
+        <span id="statusVersion">v0.4.2</span>
       </span>
     </footer>
 
@@ -430,8 +438,12 @@
           </div>
 
           <div class="field">
-            <label>想先试用 Pro？</label>
-            <p class="hint">第一版只做本地激活，还没接支付。发邮件到 cqsj6667@agent.qq.com 说明用途，我给你开通试用。</p>
+            <label>Pro 激活码</label>
+            <div class="pro-activate">
+              <input id="proCode" type="text" placeholder="填入激活码，例如 ZW-XXXX-XXXX-1" autocomplete="off">
+              <button class="btn btn-primary btn-sm" id="btnProActivate" type="button">激活</button>
+            </div>
+            <p class="hint" id="proStatus">还没激活。核心功能不受影响，Pro 只是多几个省事的功能。</p>
           </div>
         </section>
 
@@ -445,7 +457,7 @@
               </svg>
             </div>
             <h3>AI产出管家</h3>
-            <p class="about-version" id="aboutVersion">v0.2.0</p>
+            <p class="about-version" id="aboutVersion">v0.4.2</p>
             <p class="about-desc">专门管理 AI 产出文件的本地工具。免费开源，不卖算力，不碰你的文件内容。</p>
           </div>
 
@@ -465,6 +477,12 @@
             <button id="btnOpenSite" class="btn btn-primary" type="button">访问官网</button>
           </div>
         </section>
+      </div>
+
+      <div class="settings-brandbar">
+        <span class="sb-brand">智维工作室 · Zhiwei Studio</span>
+        <a href="#" id="settingsHomepage">www.zhiweistudio.com.cn</a>
+        <span class="sb-note">承接 AI 应用 / 桌面工具 / 自动化脚本定制</span>
       </div>
     </div>
   </div>
