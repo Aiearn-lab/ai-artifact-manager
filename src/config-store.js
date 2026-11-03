@@ -48,7 +48,8 @@ const DEFAULTS = {
     model: ''
   },
   mcp: {
-    enabled: false
+    enabled: false,
+    token: ''
   },
   ui: {
     theme: 'light'
@@ -63,9 +64,13 @@ function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function deepMerge(base, patch) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
   for (const [k, v] of Object.entries(patch || {})) {
+    // 防原型污染：外部传进来的配置不允许碰这三个键
+    if (FORBIDDEN_KEYS.has(k)) continue;
     if (isPlainObject(v) && isPlainObject(out[k])) out[k] = deepMerge(out[k], v);
     else out[k] = v;
   }
