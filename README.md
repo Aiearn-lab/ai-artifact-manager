@@ -79,7 +79,7 @@ node _test/run_test.js   # 测试
 
 MIT 协议，全部功能免费，没有 Pro。觉得有用就点个 star。
 
-**智维工作室 / Zhiwei Studio** · [www.zhiweistudio.com.cn](https://www.zhiweistudio.com.cn) · cqsj6667@agent.qq.com
+**智维工作室 / Zhiwei Studio** · [www.zhiweistudio.com.cn](https://www.zhiweistudio.com.cn) · 7388603@qq.com
 承接 AI 应用、桌面工具、自动化脚本的定制开发。
 
 ## License
