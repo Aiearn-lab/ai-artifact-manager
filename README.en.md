@@ -81,7 +81,7 @@ node _test/run_test.js   # tests
 
 MIT licensed, every feature free, no Pro tier. If it saves you time, a star is the best thanks.
 
-**Zhiwei Studio** · [www.zhiweistudio.com.cn](https://www.zhiweistudio.com.cn) · cqsj6667@agent.qq.com
+**Zhiwei Studio** · [www.zhiweistudio.com.cn](https://www.zhiweistudio.com.cn) · 7388603@qq.com
 We build AI apps, desktop tools and automation for clients — get in touch if you need something custom.
 
 ## License
