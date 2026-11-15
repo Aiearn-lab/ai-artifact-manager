@@ -18,10 +18,11 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win portable nsis"
+    "dist": "electron-builder --win portable nsis",
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
-    "electron": "44.4.5",
+    "electron": "44.9.1",
     "electron-builder": "26.15.3"
   },
   "build": {
