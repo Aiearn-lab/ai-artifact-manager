@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, safeStorage, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fsSync = require('fs');
 const fsp = fsSync.promises;
@@ -14,6 +14,13 @@ const archiver = require('./src/archiver');
 const exporter = require('./src/exporter');
 const ai = require('./src/ai');
 const { ConfigStore } = require('./src/config-store');
+const { OverridesStore } = require('./src/overrides');
+const tidy = require('./src/tidy');
+const { Stash } = require('./src/stash');
+const { findVersionChains } = require('./src/versionchain');
+const tiers = require('./src/tiers');
+const digest = require('./src/digest');
+const { AdviceCache, judgeBatch, cacheKey } = require('./src/ai-advice');
 const { createMcpHttpServer } = require('./src/mcp-http');
 const { safeFileName } = require('./src/safe-path');
 const { sourceLabel } = require('./src/source-label');
@@ -23,10 +30,19 @@ const VERSION = require('./package.json').version;
 
 let mainWindow = null;
 let configStore = null;
+let overridesStore = null;
+let adviceCache = null;
+let stashStore = null; // 回收箱（三档责任·第三档），init 里建
+let adviseAbort = false;
 let mcpServer = null;
 let lastScan = null;
 let autoScanDir = null;
 let scanAbort = false;
+let tray = null; // v0.8 M3：托盘常驻周报，e2e 下不建
+let quitting = false; // 只有托盘菜单/真正退出动作才置真，关窗口≠退出
+// 回归/截图判定：argv 走 _test/ 的（e2e、run_watch…）和自设 AI_AM_E2E 的（截图脚本）都不许偷偷自动全盘扫
+const isE2E =
+  (process.argv[1] && String(process.argv[1]).includes('_test')) || process.env.AI_AM_E2E === '1';
 
 /** portable 版启动时 process.execPath 指向临时解压目录，必须拿真实 exe 路径 */
 function appExePath() {
@@ -120,6 +136,9 @@ function toPublic(scan) {
       source: f.source,
       category: f.category,
       duplicate: f.duplicate,
+      inProject: !!f.inProject,
+      mine: !!f.mine,
+      aiAdvice: f.aiAdvice || null,
       aiSummary: f.aiSummary || ''
     }))
   };
@@ -193,6 +212,66 @@ async function appendTrashLog(items) {
   }
 }
 
+/** 归档批次清单：记下「从哪搬到哪」，支持一键撤销。只记路径，不存文件本体 */
+function archiveManifestPath() {
+  return path.join(app.getPath('userData'), 'archive-manifests.json');
+}
+
+async function loadArchiveManifests() {
+  try {
+    const raw = await fsp.readFile(archiveManifestPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function appendArchiveManifest(batch) {
+  if (!batch || !batch.items || !batch.items.length) return;
+  const list = await loadArchiveManifests();
+  list.unshift(batch);
+  try {
+    const tmp = `${archiveManifestPath()}.tmp`;
+    await fsp.writeFile(tmp, JSON.stringify(list.slice(0, 30), null, 2), 'utf8');
+    await fsp.rename(tmp, archiveManifestPath());
+  } catch {
+    /* 记录写不进去不影响文件已经归档 */
+  }
+}
+
+/**
+ * v0.8 M3 本地事件流水（月报的「放回」账本）。
+ * 回收箱放回后条目会从索引里消失，没有别的地方留痕，所以放这一本只追加的账：
+ * 全部落在本机 userData，永不上传（零遥测写死在关于页）。
+ */
+function digestEventsPath() {
+  return path.join(app.getPath('userData'), 'digest-events.json');
+}
+
+async function loadDigestEvents() {
+  try {
+    const raw = await fsp.readFile(digestEventsPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function appendDigestEvent(ev) {
+  if (!ev || !ev.kind) return;
+  const list = await loadDigestEvents();
+  list.unshift({ at: Date.now(), kind: ev.kind, count: Number(ev.count) || 0 });
+  try {
+    const tmp = `${digestEventsPath()}.tmp`;
+    await fsp.writeFile(tmp, JSON.stringify(list.slice(0, 500), null, 2), 'utf8');
+    await fsp.rename(tmp, digestEventsPath());
+  } catch {
+    /* 记不上账不影响文件已经放好 */
+  }
+}
+
 /**
  * 把一批文件送进 Windows 系统回收站——和用户自己右键删除完全一样。
  * 用户能在系统回收站里右键「还原」，也能自己清空，管家不另建任何文件夹。
@@ -215,6 +294,86 @@ async function trashFiles(files) {
   }
   if (result.done.length) await appendTrashLog(result.done);
   return result;
+}
+
+/* ============ v0.8 M3 托盘常驻：一句话周报，不弹窗不遥测 ============ */
+
+async function computeDigest() {
+  let trashLog = [];
+  try {
+    const parsed = JSON.parse(await fsp.readFile(trashLogPath(), 'utf8'));
+    if (Array.isArray(parsed)) trashLog = parsed;
+  } catch {
+    /* 没记录＝没删过 */
+  }
+  const manifests = await loadArchiveManifests();
+  const events = await loadDigestEvents();
+  const week = digest.weeklySummary(lastScan ? lastScan.files : []);
+  const stashMoved = stashStore ? stashStore.list() : [];
+  const month = digest.monthlyReport({
+    stashMoved,
+    stashRestored: events.flatMap((ev) =>
+      ev && ev.kind === 'stash-restore' ? Array.from({ length: ev.count || 0 }, () => ({ at: ev.at })) : []
+    ),
+    archived: manifests
+      .filter((b) => b && Array.isArray(b.items) && b.items.length && !b.undoneAt)
+      .map((b) => ({ at: b.at, count: b.items.length })),
+    trashed: trashLog.flatMap((b) =>
+      (b && Array.isArray(b.files) ? b.files : []).map((x) => ({ at: b.at, size: x.size || 0 }))
+    )
+  });
+  return { week, month, trayLine: digest.trayLine(week), monthLine: digest.monthLine(month) };
+}
+
+/** 托盘 tooltip 刷成最新一句话；没托盘就什么都不做 */
+async function refreshTray() {
+  if (!tray) return;
+  try {
+    const d = await computeDigest();
+    tray.setToolTip(d.trayLine);
+  } catch {
+    /* 刷不动就留着上一句 */
+  }
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  else {
+    if (!mainWindow.isVisible()) mainWindow.show();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+}
+
+function createTray() {
+  if (tray || isE2E) return; // 回归测试不常驻托盘，进程要能干净退出
+  try {
+    const img = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'));
+    if (img.isEmpty()) return;
+    tray = new Tray(img);
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: `${APP_NAME} v${VERSION}`, enabled: false },
+        { label: '打开管家', click: showMainWindow },
+        { type: 'separator' },
+        {
+          label: '退出管家',
+          click: () => {
+            quitting = true;
+            app.quit();
+          }
+        }
+      ])
+    );
+    tray.on('click', showMainWindow);
+    refreshTray();
+    setInterval(() => {
+      refreshTray();
+    }, 60 * 60 * 1000); // 每小时兜底刷一次（扫描完成时也会刷）
+  } catch {
+    /* 这台机器不支持托盘就照常运行，不报错打扰 */
+    tray = null;
+  }
 }
 
 /** 预览/打开/定位只允许操作本次扫描结果里的文件，防止渲染进程传任意路径 */
@@ -311,6 +470,7 @@ async function watchScanOnce(dir) {
   if (!fresh.length || watchState.priming) return { added: 0 };
 
   classifier.classifyAll(fresh);
+  if (overridesStore) overridesStore.apply(fresh);
   const items = fresh.map((f) => ({
     path: f.path,
     name: f.name,
@@ -494,7 +654,8 @@ function registerIpc() {
     userData: app.getPath('userData'),
     electron: process.versions.electron,
     node: process.versions.node,
-    homepage: 'https://www.zhiweistudio.com.cn'
+    homepage: 'https://www.zhiweistudio.com.cn',
+    e2e: isE2E // 回归测试里不许偷偷自动全盘扫
   }));
 
   ipcMain.handle('disks:list', async () => {
@@ -636,6 +797,16 @@ function registerIpc() {
       }
     }
 
+    // 人工/AI 复核过的判定盖回去（含「这是我写的」负样本）——重扫不抹，别让用户反复兜底
+    if (overridesStore) overridesStore.apply(files);
+    // AI 建议按哈希认亲：内容没变，上次的建议直接带回来，不重问模型
+    if (adviceCache) {
+      for (const f of files) {
+        const hit = adviceCache.get(cacheKey(f));
+        if (hit) f.aiAdvice = { ...hit, fromCache: true };
+      }
+    }
+
     const summary = classifier.summarize(files);
     summary.duplicateStats = dupe.stats;
     summary.cancelled = cancelled;
@@ -662,6 +833,7 @@ function registerIpc() {
     await writeIndex();
     await saveLastScan();
     sendProgress('done', files.length, files.length);
+    refreshTray(); // v0.8 M3：扫完顺手把托盘那句周报刷成最新的
     return toPublic(lastScan);
   });
 
@@ -809,9 +981,24 @@ function registerIpc() {
     const base = AI_CATEGORY[payload && payload.category];
     if (!base) throw new Error('未知分类');
     f.category = { ...base, tags: (f.category && f.category.tags) || [], confidence: 'high', by: 'ai' };
+    if (overridesStore) await overridesStore.setCategory(f.path, f.hash, f.category, 'ai');
     await writeIndex();
     await saveLastScan();
     return { ok: true, category: f.category };
+  });
+
+  /**
+   * 「这是我写的」负样本：用户一句话，工具永远不再自动碰这个文件。
+   * 按路径+哈希持久化，改名/重扫都认得（见 src/overrides.js）。
+   */
+  ipcMain.handle('file:markMine', async (e, payload) => {
+    const f = findFile(payload && payload.path);
+    if (!f) throw new Error('文件不在本次扫描结果里');
+    const on = !(payload && payload.mine === false);
+    f.mine = on;
+    if (overridesStore) await overridesStore.setMine(f.path, f.hash, on);
+    await saveLastScan();
+    return { ok: true, mine: on };
   });
 
   ipcMain.handle('ai:applyTags', async (e, payload) => {
@@ -827,6 +1014,38 @@ function registerIpc() {
     await writeIndex();
     await saveLastScan();
     return { ok: true, tags };
+  });
+
+  /**
+   * AI 批量建议：只往 aiAdvice 字段写建议，绝不改分类、更不动文件。
+   * 哈希缓存+分批+可取消，本地小模型也跑得动；没配 AI 时界面不显示这个入口。
+   */
+  ipcMain.handle('ai:advise', async (e, payload) => {
+    if (!lastScan) throw new Error('还没有扫描结果');
+    const cfg = aiConfigPlain();
+    if (!cfg.baseUrl) throw new Error('先在设置里配置 AI（本机 Ollama / LM Studio 或兼容接口）');
+    const p = payload || {};
+    const files = Array.isArray(p.paths) && p.paths.length ? pickFiles(p.paths) : lastScan.files;
+    if (!files.length) throw new Error('没有可判定的文件');
+    adviseAbort = false;
+    const adviceOut = [];
+    const r = await judgeBatch(cfg, files, {
+      cache: adviceCache,
+      shouldStop: () => adviseAbort,
+      onItem: ({ done, total, file }) => {
+        adviceOut.push({ path: file.path, advice: file.aiAdvice });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai:adviceProgress', { done, total, path: file.path });
+        }
+      }
+    });
+    await saveLastScan();
+    return { ...r, advice: adviceOut };
+  });
+
+  ipcMain.handle('ai:adviseCancel', () => {
+    adviseAbort = true;
+    return true;
   });
 
   // 打开 Windows 自己的回收站，还原/清空都在系统里做，管家不插手
@@ -855,34 +1074,310 @@ function registerIpc() {
     return true;
   });
 
+  /** 项目内代码只盘点不搬删：所有移动/删除入口共用的硬闸 */  function splitProjectGuard(files) {
+    const allowed = [];
+    const skipped = [];
+    for (const f of files) {
+      if (f.inProject) skipped.push({ path: f.path, reason: '项目内代码只盘点不搬删（搬走会断掉项目依赖）' });
+      else allowed.push(f);
+    }
+    return { allowed, skipped };
+  }
+
   ipcMain.handle('archive:run', async (e, payload) => {
     const p = payload || {};
-    const files = pickFiles(p.paths);
-    if (!files.length) throw new Error('没有选中任何文件');
+    const picked = pickFiles(p.paths);
+    if (!picked.length) throw new Error('没有选中任何文件');
     const root = p.targetDir || configStore.get().archiveRoot;
     if (!root) throw new Error('请先设置归档目录（设置 → 默认归档路径）');
+    const { allowed, skipped } = splitProjectGuard(picked);
+    if (!allowed.length) return { ok: 0, failed: [], skipped, done: [], target: root, mode: 'move', byDir: {} };
     // 本产品没有复制归档：整理=移动，防止越清越多
-    return archiver.archive(files, root);
+    const r = await archiver.archive(allowed, root);
+    r.skipped = [...skipped, ...r.skipped];
+    // 批次清单：从哪搬到哪，支持「撤销上次归档」
+    await appendArchiveManifest({
+      at: Date.now(),
+      root,
+      items: r.done.map((d) => ({ from: d.path, to: d.target, name: path.basename(d.path) }))
+    });
+    if (r.done.length) await appendDigestEvent({ kind: 'archive', count: r.done.length });
+    return r;
+  });
+
+  /** 撤销最近一次归档：把整批搬回原位置（原位置被占就加序号，绝不覆盖） */
+  ipcMain.handle('archive:undo', async () => {
+    const list = await loadArchiveManifests();
+    const idx = list.findIndex((b) => b && Array.isArray(b.items) && b.items.length && !b.undoneAt);
+    if (idx < 0) return { ok: 0, failed: [], skipped: [], done: [], empty: true };
+    const batch = list[idx];
+    const r = await archiver.restoreArchived(batch.items);
+    batch.undoneAt = Date.now();
+    batch.restored = r.ok;
+    try {
+      const tmp = `${archiveManifestPath()}.tmp`;
+      await fsp.writeFile(tmp, JSON.stringify(list.slice(0, 30), null, 2), 'utf8');
+      await fsp.rename(tmp, archiveManifestPath());
+    } catch {
+      /* 标记失败不影响文件已还原 */
+    }
+    return r;
   });
 
   ipcMain.handle('duplicate:remove', async (e, payload) => {
     const p = payload || {};
-    const files = pickFiles(p.paths).filter(
+    const picked = pickFiles(p.paths).filter(
       (f) =>
         f.duplicate &&
         f.duplicate.isDuplicate &&
         !(f.duplicate.withPath && path.resolve(f.path) === path.resolve(f.duplicate.withPath))
     );
-    if (!files.length) return { ok: 0, failed: [], skipped: [{ reason: '没有可删除的重复文件' }], done: [] };
-    return trashFiles(files);
+    const { allowed, skipped } = splitProjectGuard(picked);
+    if (!allowed.length) return { ok: 0, failed: [], skipped: skipped.length ? skipped : [{ reason: '没有可删除的重复文件' }], done: [] };
+    const r = await trashFiles(allowed);
+    r.skipped = [...skipped, ...r.skipped];
+    return r;
   });
 
   ipcMain.handle('cleanup:trash', async (e, payload) => {
     const p = payload || {};
-    const files = pickFiles(p.paths);
-    if (!files.length) return { ok: 0, failed: [], skipped: [], done: [] };
-    return trashFiles(files);
+    const picked = pickFiles(p.paths);
+    if (!picked.length) return { ok: 0, failed: [], skipped: [], done: [] };
+    // 手动勾选是用户的明确决定，来源闸不拦；但项目内代码照样硬保护
+    const { allowed, skipped } = splitProjectGuard(picked);
+    if (!allowed.length) return { ok: 0, failed: [], skipped, done: [] };
+    const r = await trashFiles(allowed);
+    r.skipped = [...skipped, ...r.skipped];
+    return r;
   });
+
+  /**
+   * 一键整理预案：主进程算，渲染进程只负责展示和确认。
+   * 来源闸+置信分级见 src/tidy.js；待确认桶只能用户手动勾。
+   */
+  ipcMain.handle('tidy:plan', async () => {
+    if (!lastScan) throw new Error('还没有扫描结果');
+    const cfg = configStore.get();
+    const aiOnly = !cfg.tidy || cfg.tidy.aiOnly !== false;
+    return tidy.buildPlan(lastScan.files, { aiOnly });
+  });
+
+  /**
+   * 执行整理。渲染进程把用户确认过的清单传回来，这里逐条重新过闸——
+   * 就算界面被绕过，主进程也不会自动碰未识别/低置信/项目内/我写的文件。
+   */
+  ipcMain.handle('tidy:run', async (e, payload) => {
+    const p = payload || {};
+    if (!lastScan) throw new Error('还没有扫描结果');
+    const cfg = configStore.get();
+    const aiOnly = !cfg.tidy || cfg.tidy.aiOnly !== false;
+    const root = p.targetDir || cfg.archiveRoot;
+
+    const revalidate = (paths, wantAction) => {
+      const okFiles = [];
+      const skipped = [];
+      for (const f of pickFiles(paths)) {
+        if (tidy.actionFor(f) !== wantAction) {
+          skipped.push({ path: f.path, reason: '分类已变化，请重新生成预案' });
+          continue;
+        }
+        const gate = tidy.autoEligible(f, aiOnly);
+        if (!gate.ok) {
+          skipped.push({ path: f.path, reason: `安全闸拦截（${gate.why}）` });
+          continue;
+        }
+        okFiles.push(f);
+      }
+      return { okFiles, skipped };
+    };
+
+    const keep = revalidate(p.keepPaths, 'keep');
+    const trash = revalidate(p.trashPaths, 'trash');
+    const out = { archived: 0, trashed: 0, failed: [], skipped: [...keep.skipped, ...trash.skipped], done: [] };
+
+    if (keep.okFiles.length) {
+      if (!root) throw new Error('请先设置归档目录（设置 → 默认归档路径）');
+      const r = await archiver.archive(keep.okFiles, root);
+      out.archived = r.ok;
+      out.failed.push(...r.failed);
+      out.skipped.push(...r.skipped);
+      out.done.push(...r.done);
+      await appendArchiveManifest({
+        at: Date.now(),
+        root,
+        items: r.done.map((d) => ({ from: d.path, to: d.target, name: path.basename(d.path) }))
+      });
+    }
+    if (trash.okFiles.length) {
+      const r = await trashFiles(trash.okFiles);
+      out.trashed = r.ok;
+      out.failed.push(...r.failed);
+      out.skipped.push(...r.skipped);
+      out.done.push(...r.done);
+    }
+    return out;
+  });
+
+  /* ============ v0.8 小白模式：三档责任预案与执行（见 src/tiers.js） ============ */
+
+  const slim = (f) => ({
+    id: f.id,
+    path: f.path,
+    name: f.name,
+    size: f.size,
+    mtime: f.mtime,
+    withPath: f.duplicate ? f.duplicate.withPath : undefined,
+    family: f.family,
+    dir: path.dirname(f.path)
+  });
+
+  /** 三档预案：一档静默删的副本 / 二档按组点头的版本卡 / 三档只收不删的回收箱候选 */
+  ipcMain.handle('tier:plan', async () => {
+    if (!lastScan) throw new Error('还没有扫描结果');
+    const plan = tiers.buildTierPlan(lastScan.files);
+    return {
+      silentDupes: plan.silentDupes.map(slim),
+      chains: plan.chains.map((c) => ({
+        family: c.family,
+        ext: c.ext,
+        memberCount: c.members.length,
+        keeper: slim(c.keeper),
+        older: c.older.map(slim)
+      })),
+      stash: plan.stash.map(slim),
+      stats: plan.stats,
+      stashStats: stashStore ? stashStore.stats() : { count: 0, size: 0 }
+    };
+  });
+
+  /**
+   * 执行三档。payload.approvedChains＝用户点头过的版本卡组（按 family+ext 认，主进程重算防篡改）。
+   * 规矩：一档删进系统回收站（正本还在才删）；二档只删被点头组的旧版本；三档搬进回收箱不销毁。
+   * 逐条重新过闸——界面被绕过也碰不到未识别/项目内/我写的文件。
+   */
+  ipcMain.handle('tier:run', async (e, payload) => {
+    const p = payload || {};
+    if (!lastScan) throw new Error('还没有扫描结果');
+    const approved = new Set((p.approvedChains || []).map((k) => String(k)));
+    const plan = tiers.buildTierPlan(lastScan.files);
+    const out = {
+      dupTrashed: 0,
+      chainTrashed: 0,
+      stashed: 0,
+      failed: [],
+      skipped: [],
+      done: []
+    };
+
+    // 第一档：静默删，但必须当场复核「正本此刻还在」——预案生成后正本被人删了，副本就不再冗余
+    const dupTargets = [];
+    for (const f of plan.silentDupes) {
+      const keeperPath = f.duplicate && f.duplicate.withPath;
+      if (!keeperPath || !fsSync.existsSync(keeperPath)) {
+        out.skipped.push({ path: f.path, reason: '正本已经不在了，副本不敢当冗余删' });
+        continue;
+      }
+      dupTargets.push(f);
+    }
+    if (dupTargets.length) {
+      const r = await trashFiles(dupTargets);
+      out.dupTrashed = r.ok;
+      out.failed.push(...r.failed.map((x) => ({ ...x, tier: 'dup' })));
+      out.skipped.push(...r.skipped);
+      out.done.push(...r.done.map((d) => ({ ...d, tier: 'dup' })));
+    }
+
+    // 第二档：只处理用户点过头的组；主进程重算认亲结果，按 family|ext 对齐
+    const chainFiles = [];
+    for (const c of plan.chains) {
+      const key = `${c.family}|${c.ext}`;
+      if (!approved.has(key)) continue;
+      for (const f of c.older) chainFiles.push(f);
+    }
+    if (chainFiles.length) {
+      const guard = splitProjectGuard(chainFiles);
+      out.skipped.push(...guard.skipped);
+      const r = await trashFiles(guard.allowed);
+      out.chainTrashed = r.ok;
+      out.failed.push(...r.failed.map((x) => ({ ...x, tier: 'chain' })));
+      out.skipped.push(...r.skipped);
+      out.done.push(...r.done.map((d) => ({ ...d, tier: 'chain' })));
+    }
+
+    // 第三档：搬进回收箱（只搬不毁，项目内/我写的已在预案层挡掉，这里再过一遍项目闸）
+    if (plan.stash.length) {
+      const guard = splitProjectGuard(plan.stash);
+      out.skipped.push(...guard.skipped);
+      const sr = await stashStore.stash(guard.allowed.map((f) => ({ path: f.path, hash: f.hash })));
+      out.stashed = sr.ok;
+      out.failed.push(...sr.failed.map((x) => ({ ...x, tier: 'stash' })));
+      for (const m of sr.moved) out.done.push({ path: m.from, name: m.name, tier: 'stash', to: m.to });
+    }
+
+    // 从本次扫描结果里摘掉已处理项，界面列表保持真实
+    const donePaths = new Set(out.done.map((d) => path.resolve(d.path).toLowerCase()));
+    if (donePaths.size) {
+      lastScan.files = lastScan.files.filter((f) => !donePaths.has(path.resolve(f.path).toLowerCase()));
+      await saveLastScan();
+    }
+    out.stashStats = stashStore.stats();
+    return out;
+  });
+
+  /** 回收箱：列表 / 一键放回 / 清空（清空＝用户主动动作，文件进系统回收站） */
+  ipcMain.handle('stash:list', async () => {
+    if (!stashStore) return { items: [], stats: { count: 0, size: 0 } };
+    return { items: stashStore.list(), stats: stashStore.stats() };
+  });
+
+  ipcMain.handle('stash:restore', async (e, payload) => {
+    const ids = payload && payload.ids;
+    const r = await stashStore.restore(Array.isArray(ids) ? ids : undefined);
+    if (r.restored.length) {
+      // 放回的件重新进本次扫描结果（原位路径），否则用户看着它「消失了」
+      const known = new Set(lastScan ? lastScan.files.map((f) => path.resolve(f.path).toLowerCase()) : []);
+      for (const it of r.restored) {
+        if (known.has(path.resolve(it.to).toLowerCase())) continue;
+        try {
+          const st = await fsp.stat(it.to);
+          if (!lastScan) break;
+          lastScan.files.push({
+            id: `restored-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            path: it.to,
+            name: path.basename(it.to),
+            ext: path.extname(it.to).toLowerCase(),
+            size: st.size,
+            mtime: st.mtimeMs,
+            mtimeMs: st.mtimeMs,
+            source: { id: 'unknown' },
+            category: { key: 'other', group: 'other', label: '其他文件', confidence: 'low' },
+            duplicate: null,
+            inProject: false,
+            mine: false,
+            hash: null,
+            aiAdvice: null
+          });
+        } catch {
+          /* 放回失败不记账 */
+        }
+      }
+      await saveLastScan();
+      // 月报的「放回」只能靠这本账：条目从回收箱索引里消失了，事件流水留着
+      await appendDigestEvent({ kind: 'stash-restore', count: r.restored.length });
+    }
+    return r;
+  });
+
+  ipcMain.handle('stash:empty', async () => {
+    const pend = stashStore.pendingForRemoval();
+    if (!pend.length) return { ok: 0, failed: [], skipped: [] };
+    const r = await trashFiles(pend.map((it) => ({ path: it.path, name: it.name })));
+    if (r.ok) await stashStore.drop(pend.filter((it) => !r.failed.some((x) => x.path === it.path)).map((it) => it.id));
+    return r;
+  });
+
+  /** v0.8 M3 小报：周报数字＋月报四个数字＋两句话术，全部现算自本机记录，零上报 */
+  ipcMain.handle('digest:get', async () => computeDigest());
 
   ipcMain.handle('export:run', async (e, payload) => {
     const p = payload || {};
@@ -1098,11 +1593,6 @@ function createWindow() {
           } else if (action === 'langen') {
             await mainWindow.webContents.executeJavaScript("typeof setLang === 'function' && setLang('en'); true");
             await new Promise((r) => setTimeout(r, 1500));
-          } else if (action === 'pro') {
-            await mainWindow.webContents.executeJavaScript(
-              "document.querySelector('#btnSettings').click(); document.querySelector('#settingsTabs button[data-tab=\"pro\"]').click(); true"
-            );
-            await new Promise((r) => setTimeout(r, 700));
           } else if (action === 'disks') {
             await mainWindow.webContents.executeJavaScript("document.querySelector('#btnScanScope').click(); true");
             await new Promise((r) => setTimeout(r, 900));
@@ -1153,6 +1643,14 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // v0.8 M3：有托盘时点 × 只是收进托盘——周报常驻的意思就是「人走了，管家还在盯着」
+  mainWindow.on('close', (e) => {
+    if (!quitting && tray) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
 }
 
 async function init() {
@@ -1161,6 +1659,12 @@ async function init() {
 
   configStore = new ConfigStore(app.getPath('userData'));
   await configStore.load();
+  overridesStore = new OverridesStore(app.getPath('userData'));
+  await overridesStore.load();
+  adviceCache = new AdviceCache(app.getPath('userData'));
+  await adviceCache.load();
+  stashStore = new Stash(app.getPath('userData'));
+  await stashStore.load();
 
   // 旧版本明文存的密钥，启动时自动加密迁移（迁移失败不阻断启动）
   const aiCfg = configStore.get().ai;
@@ -1174,6 +1678,7 @@ async function init() {
 
   registerIpc();
   createWindow();
+  createTray();
 
   if (configStore.get().mcp && configStore.get().mcp.enabled) {
     try {
@@ -1204,6 +1709,7 @@ if (!gotLock) {
 } else {
   app.on('second-instance', (e, argv) => {
     if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show(); // 收进托盘时双击图标要能唤回
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
@@ -1221,7 +1727,12 @@ if (!gotLock) {
 }
 
 app.on('window-all-closed', () => {
-  app.quit();
+  // 托盘还在＝用户没说要退出，进程留着继续盯周报；托盘建不起来则退回旧行为
+  if (quitting || !tray) app.quit();
+});
+
+app.on('before-quit', () => {
+  quitting = true; // app.quit()/系统注销等正规退出路径，别让 close 再拦
 });
 
 app.on('before-quit', async () => {

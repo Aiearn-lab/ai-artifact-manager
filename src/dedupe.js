@@ -70,19 +70,33 @@ function pickKeeper(group) {
 }
 
 async function readForCompare(file) {
+  // 「完全相同」必须对全文件做哈希：只哈希前 1MB 会把头部相同、尾部不同的大文件
+  // 误判成重复然后自动删掉（2026-11-06 评审查出的唯一完整误删链）。
+  // 相似度比对仍只用前 MAX_READ 的文本，省内存；哈希则逐块读完整个文件。
   try {
-    const limit = Math.min(Number(file.size) || 0, MAX_READ);
-    if (limit <= 0) return { buf: Buffer.alloc(0), text: '' };
+    const size = Number(file.size) || 0;
+    if (size <= 0) return { buf: Buffer.alloc(0), text: '' };
     const fd = await fsp.open(file.path, 'r');
-    let buf;
+    const hash = crypto.createHash('sha256');
+    const chunks = [];
+    let collected = 0;
     try {
-      buf = Buffer.alloc(limit);
-      const { bytesRead } = await fd.read(buf, 0, limit, 0);
-      buf = buf.subarray(0, bytesRead);
+      const chunk = Buffer.alloc(65536);
+      for (;;) {
+        const { bytesRead } = await fd.read(chunk, 0, chunk.length, null);
+        if (bytesRead <= 0) break;
+        const piece = chunk.subarray(0, bytesRead);
+        hash.update(piece);
+        if (collected < MAX_READ) {
+          chunks.push(Buffer.from(piece.subarray(0, Math.min(bytesRead, MAX_READ - collected))));
+          collected += Math.min(bytesRead, MAX_READ - collected);
+        }
+      }
     } finally {
       await fd.close();
     }
-    return { buf, text: buf.toString('utf8') };
+    const buf = Buffer.concat(chunks);
+    return { buf, text: buf.toString('utf8'), fullHash: hash.digest('hex') };
   } catch (err) {
     return { buf: null, text: '', error: err.code || err.message };
   }
@@ -130,7 +144,7 @@ async function detect(files, options) {
       const r = await readForCompare(f);
       if (!r.buf) continue;
       contents.set(f.id, r.text);
-      const h = sha256(r.buf);
+      const h = r.fullHash || sha256(r.buf);
       f.hash = h;
       if (!hashes.has(h)) hashes.set(h, []);
       hashes.get(h).push(f);

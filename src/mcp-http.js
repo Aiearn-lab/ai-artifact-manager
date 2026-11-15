@@ -3,6 +3,24 @@
 const http = require('http');
 const { createHandler, SERVER_INFO } = require('./mcp-core');
 
+// 单次批量请求上限：MCP 规范里批量是「几个请求打包」，不是压测工具。
+// 不设上限时 500 条 ping 一次就能让主进程同步跑满、返回十几 KB，等于本机自伤。
+const MAX_BATCH = 100;
+
+/** 只认本机 Host：防 DNS rebinding（浏览器把 evil.com 解析到 127.0.0.1 后直接打本服务） */
+function isLocalHost(hostHeader) {
+  const h = String(hostHeader || '').trim().toLowerCase();
+  if (!h) return false;
+  let hostname = '';
+  try {
+    hostname = new URL(`http://${h}`).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (hostname === 'localhost' || hostname === '[::1]' || hostname === '::1') return true;
+  return /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
 /**
  * 内置 MCP 服务（Streamable HTTP，127.0.0.1 本机监听）。
  * 只监听回环地址，不对局域网/公网开放。
@@ -26,8 +44,28 @@ function createMcpHttpServer(options) {
       return;
     }
 
-    // 本机鉴权：没有 token 或 token 不对，一律拒绝，防止本机其他程序乱调
-    if (token) {
+    // Host 必须指向本机：哪怕带了正确 token，来自 evil.example.com 的请求也拒
+    if (!isLocalHost(req.headers.host)) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'forbidden', message: '只接受本机访问（Host 须为 127.0.0.1 / localhost）' }));
+      return;
+    }
+
+    // 没有 token 一律拒绝（fail-closed）。上层会先自动生成并持久化一个 token；
+    // 走到这里还空着，说明调用方没配置好，此时放行等于把本机文件索引开放给任何本地进程
+    if (!token) {
+      res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(
+        JSON.stringify({
+          error: 'no_token',
+          message: '本机 MCP 服务未配置访问 token，已拒绝。请在软件里开启 MCP 服务（会自动生成 token）。'
+        })
+      );
+      return;
+    }
+
+    // 本机鉴权：token 不对一律拒绝，防止本机其他程序乱调
+    {
       let provided = '';
       try {
         const u = new URL(req.url, 'http://127.0.0.1');
@@ -87,6 +125,18 @@ function createMcpHttpServer(options) {
       const isBatch = Array.isArray(payload);
       const items = isBatch ? payload : [payload];
       const responses = [];
+
+      if (isBatch && items.length > MAX_BATCH) {
+        res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: null,
+            error: { code: -32600, message: `批量请求最多 ${MAX_BATCH} 条，收到 ${items.length} 条` }
+          })
+        );
+        return;
+      }
 
       for (const item of items) {
         const id = item && Object.prototype.hasOwnProperty.call(item, 'id') ? item.id : undefined;

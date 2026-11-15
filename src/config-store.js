@@ -52,17 +52,20 @@ const DEFAULTS = {
   },
   ui: {
     theme: 'light',
-    onboarded: false // 首次使用引导看过没有
+    onboarded: false, // 首次使用引导看过没有
+    autoFullScan: true // v0.8 M3 开箱即用：装机第一次打开就自动全盘扫（安全靠硬排除+可反悔，不靠缩小范围）
+  },
+  // 一键整理安全闸：默认只自动处理「确认 AI 产出 + 高置信」的文件，
+  // 其余进待确认桶只能手动勾。关掉=回到旧行为，仅供调试，不建议。
+  tidy: {
+    aiOnly: true
   },
   // 自动监控：盯住这几个文件夹，出现新文件就分类提示（不会自己动文件）
   watch: {
     enabled: false,
     dirs: []
-  },
-  pro: {
-    activated: false,
-    code: ''
   }
+  // v0.8：pro.activated/pro.code 僵尸键已删（全仓无任何消费方）；ui.lang 保留兼容旧配置文件
 };
 
 function isPlainObject(v) {
@@ -70,6 +73,98 @@ function isPlainObject(v) {
 }
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+// ---------- 配置校验 ----------
+// 外部传进来的值（渲染进程 IPC、手工改过的 config.json）一律先过闸：
+// 校验器返回「规范化后的值」，返回 undefined 表示不合法、整个键丢弃（保留原值/默认值）。
+// 目的不是刁难用户，是让非法值进不来——maxDepth:-5 会让扫描原地空转，
+// whitelist 变成字符串会让「不扫系统目录」这条安全线直接失效。
+const asStr = (v) => (typeof v === 'string' ? v : undefined);
+const asBool = (v) => {
+  if (typeof v === 'boolean') return v;
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return undefined;
+};
+const asInt = (min, max) => (v) => {
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isInteger(n)) return undefined;
+  if (n < min || n > max) return undefined;
+  return n;
+};
+const asStrList = (v) => {
+  if (!Array.isArray(v)) return undefined;
+  for (const x of v) if (typeof x !== 'string') return undefined;
+  return v.slice();
+};
+const asWhitelist = (v) => {
+  if (!Array.isArray(v)) return undefined;
+  const out = [];
+  for (const it of v) {
+    if (!isPlainObject(it)) return undefined;
+    if (it.type !== 'path' && it.type !== 'ext') return undefined;
+    if (typeof it.value !== 'string' || !it.value.trim()) return undefined;
+    out.push({ type: it.type, value: it.value.trim(), builtin: !!it.builtin });
+  }
+  return out;
+};
+// AI 接口地址只接受 http(s)：file:/javascript:/data: 都不是「模型服务」，
+// 让它们进来等于把本地文件读取/脚本执行的能力交给一个配置项
+const asHttpUrl = (v) => {
+  if (typeof v !== 'string') return undefined;
+  if (!v.trim()) return '';
+  return /^https?:\/\/[^\s]+$/i.test(v.trim()) ? v.trim() : undefined;
+};
+const asTheme = (v) => (v === 'light' || v === 'dark' ? v : undefined);
+
+const SCHEMA = {
+  archiveRoot: asStr,
+  whitelist: asWhitelist,
+  includeExt: asStrList,
+  excludeExt: asStrList,
+  maxDepth: asInt(1, 64),
+  maxFiles: asInt(1, 500000),
+  ai: { provider: asStr, baseUrl: asHttpUrl, apiKey: asStr, model: asStr },
+  mcp: { enabled: asBool, token: asStr },
+  ui: { theme: asTheme, onboarded: asBool, autoFullScan: asBool, lang: asStr },
+  tidy: { aiOnly: asBool },
+  watch: { enabled: asBool, dirs: asStrList }
+};
+
+/**
+ * 按 SCHEMA 过滤一个补丁对象。
+ * keepUnknown=true 时保留未知键（读旧配置文件用：降级不该抹掉新版本写的键）。
+ */
+function sanitize(node, schema, prefix, rejected, keepUnknown) {
+  const out = {};
+  for (const [k, v] of Object.entries(node || {})) {
+    if (FORBIDDEN_KEYS.has(k)) {
+      rejected.push(`${prefix}${k}（禁止的键）`);
+      continue;
+    }
+    const rule = schema[k];
+    if (rule === undefined) {
+      if (keepUnknown) out[k] = v;
+      else rejected.push(`${prefix}${k}（未知配置项）`);
+      continue;
+    }
+    if (typeof rule === 'object') {
+      if (!isPlainObject(v)) {
+        rejected.push(`${prefix}${k}（应为对象）`);
+        continue;
+      }
+      out[k] = sanitize(v, rule, `${prefix}${k}.`, rejected, keepUnknown);
+      continue;
+    }
+    const norm = rule(v);
+    if (norm === undefined) {
+      rejected.push(`${prefix}${k}（类型或范围不合法）`);
+      continue;
+    }
+    out[k] = norm;
+  }
+  return out;
+}
 
 function deepMerge(base, patch) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
@@ -94,7 +189,13 @@ class ConfigStore {
       await fsp.mkdir(this.dir, { recursive: true });
       const raw = await fsp.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
-      this.data = deepMerge(this.data, parsed && typeof parsed === 'object' ? parsed : {});
+      const rejected = [];
+      // 读的时候保留未知键（降级兼容），但已知键里的非法值一律丢回默认值——
+      // 配置文件被改坏不该让程序一直带着坏值跑
+      const clean = sanitize(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}, SCHEMA, '', rejected, true);
+      this.data = deepMerge(this.data, clean);
+      this.lastRejected = rejected;
+      if (rejected.length) console.warn('[config] 已忽略非法配置：', rejected.join('；'));
     } catch (err) {
       if (err.code !== 'ENOENT') {
         // 配置损坏时不让程序起不来：备份坏文件后用默认值
@@ -122,7 +223,11 @@ class ConfigStore {
   }
 
   async patch(partial) {
-    this.data = deepMerge(this.data, partial || {});
+    const rejected = [];
+    const clean = sanitize(partial, SCHEMA, '', rejected, false);
+    this.lastRejected = rejected;
+    if (rejected.length) console.warn('[config] 已拒绝非法配置：', rejected.join('；'));
+    this.data = deepMerge(this.data, clean);
     await this.save();
     return this.data;
   }

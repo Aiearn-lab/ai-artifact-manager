@@ -74,10 +74,10 @@ function t(key, vars) {
 }
 
 function detectLang() {
+  // v0.8：英文界面入口已移除（代码保留作内部截图用）。默认只认显式保存过的 'en'，
+  // 其他一律中文——不再按系统语言自动切英文，小白装完看到的就是中文。
   const saved = state.config && state.config.ui && state.config.ui.lang;
-  if (saved === 'zh' || saved === 'en') return saved;
-  const sys = String(navigator.language || 'zh').toLowerCase();
-  return sys.startsWith('zh') ? 'zh' : 'en';
+  return saved === 'en' ? 'en' : 'zh';
 }
 
 /** 把页面上所有打了标记的文案换成当前语言 */
@@ -144,7 +144,7 @@ function toast(msg, isError) {
 
 function setBusy(v) {
   state.busy = v;
-  ['#btnQuickScan', '#btnPickFolder', '#btnEmptyScan', '#btnEmptyFolder'].forEach((sel) => {
+  ['#btnQuickScan', '#btnPickFolder', '#btnEmptyScan'].forEach((sel) => {
     const el = $(sel);
     if (el) el.disabled = v;
   });
@@ -181,8 +181,9 @@ async function init() {
     state.appPaths = {};
   }
 
+  let info = {};
   try {
-    const info = await window.api.appInfo();
+    info = await window.api.appInfo();
     $('#statusVersion').textContent = `v${info.version}`;
     $('#aboutVersion').textContent = `v${info.version}`;
   } catch {
@@ -192,6 +193,17 @@ async function init() {
   try {
     const last = await window.api.lastScan();
     if (last && last.files && last.files.length) applyScan(last);
+    // v0.8 M3 开箱即用：装机第一次打开就自动把整台电脑扫一遍（只盘点不动手），
+    // 上次被叫停的半截账也不算数；回归测试里关掉，免得把固定样本之外的盘也扫进来。
+    if (
+      (!last || !(last.files || []).length || (last.summary && last.summary.cancelled)) &&
+      info.e2e !== true &&
+      (!state.config || !state.config.ui || state.config.ui.autoFullScan !== false)
+    ) {
+      const disks = await window.api.listDisks();
+      const roots = (disks || []).map((d) => d.root).filter(Boolean);
+      if (roots.length) scanRoots(roots, t('label.allDisks'));
+    }
   } catch {
     /* ignore */
   }
@@ -252,8 +264,12 @@ function bindEvents() {
   });
   $('#btnQuickScan').addEventListener('click', quickScan);
   $('#btnPickFolder').addEventListener('click', pickFolder);
-  $('#btnEmptyScan').addEventListener('click', quickScan);
-  $('#btnEmptyFolder').addEventListener('click', pickFolder);
+  // v0.8 小白首屏：空状态「帮我扫一扫」= 全盘扫描入口（和顶部按钮同一个流程），
+  // 旧行为只扫桌面/下载/文档——哥哥判过「AI 产出一般不放这几个地方」，废弃。
+  $('#btnEmptyScan').addEventListener('click', () => {
+    if (state.busy) return;
+    openDiskModal();
+  });
 
   $('#btnCloseDisk').addEventListener('click', closeDiskModal);
   $('#diskModal').addEventListener('click', (e) => {
@@ -288,14 +304,7 @@ function bindEvents() {
     renderList(); // 先按文件名/标签出结果，正文结果稍后补进来
     scheduleContentSearch(state.filter.q);
   });
-  $('#setLang').addEventListener('change', async (e) => {
-    const v = e.target.value;
-    if (v) await setLang(v);
-    else {
-      const auto = detectLang();
-      await setLang(auto);
-    }
-  });
+  // v0.8：界面语言选择器已移除（英文入口下线），setLang 仅留给内部截图工具调用
   $('#btnWatchAdd').addEventListener('click', addWatchDir);
   $('#btnWatchToggle').addEventListener('click', toggleWatch);
   $('#watchDirs').addEventListener('click', async (e) => {
@@ -376,10 +385,57 @@ function bindEvents() {
   });
 
   $('#btnOneClick').addEventListener('click', doOneClickOrganize);
+  $('#btnSlim').addEventListener('click', doSlim);
+  $('#btnOpenStash').addEventListener('click', openStashModal);
+  // v0.8 M3 小报：月度四个数字 + 一行服务入口
+  $('#btnOpenDigest').addEventListener('click', openDigestModal);
+  $('#btnCloseDigest').addEventListener('click', closeDigestModal);
+  $('#btnCloseDigest2').addEventListener('click', closeDigestModal);
+  $('#digestModal').addEventListener('click', (e) => {
+    if (e.target === $('#digestModal')) closeDigestModal();
+  });
+  $('#btnDigestSite').addEventListener('click', () => {
+    window.api.openUrl('https://www.zhiweistudio.com.cn');
+  });
+  $('#btnCloseSlim').addEventListener('click', closeSlimModal);
+  $('#btnCloseSlim2').addEventListener('click', closeSlimModal);
+  $('#btnSlimRun').addEventListener('click', runSlim);
+  $('#btnStashOpen2').addEventListener('click', openStashModal);
+  $('#btnCloseStash').addEventListener('click', closeStashModal);
+  $('#btnCloseStash2').addEventListener('click', closeStashModal);
+  $('#btnStashRestoreAll').addEventListener('click', restoreAllStash);
+  $('#btnStashEmpty').addEventListener('click', emptyStash);
+  $('#slimModal').addEventListener('click', (e) => {
+    if (e.target === $('#slimModal')) closeSlimModal();
+  });
+  $('#stashModal').addEventListener('click', (e) => {
+    if (e.target === $('#stashModal')) closeStashModal();
+  });
+  $('#slimBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-slim-chain]');
+    if (!btn || !tierPlan) return;
+    const key = btn.getAttribute('data-slim-chain');
+    const act = btn.getAttribute('data-slim-act');
+    if (act === 'approve') tierApproved.add(key);
+    if (act === 'revoke') tierApproved.delete(key);
+    renderSlimBody();
+  });
+  $('#stashBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-stash-restore]');
+    if (!btn) return;
+    restoreStash([btn.getAttribute('data-stash-restore')]);
+  });
   $('#btnArchive').addEventListener('click', doArchive);
+  $('#btnUndoArchive').addEventListener('click', doUndoArchive);
   $('#btnExport').addEventListener('click', doExport);
   $('#btnCleanDup').addEventListener('click', doCleanDuplicates);
   $('#btnOpenTrash').addEventListener('click', openTrash);
+  $('#btnCloseTidy').addEventListener('click', () => $('#tidyModal').classList.add('hidden'));
+  $('#btnTidyCancel').addEventListener('click', () => $('#tidyModal').classList.add('hidden'));
+  $('#btnTidyRun').addEventListener('click', runTidyPlan);
+  $('#tidyModal').addEventListener('click', (e) => {
+    if (e.target === $('#tidyModal')) $('#tidyModal').classList.add('hidden');
+  });
   $('#btnCloseTrash').addEventListener('click', () => $('#trashModal').classList.add('hidden'));
   $('#trashModal').addEventListener('click', (e) => {
     if (e.target === $('#trashModal')) $('#trashModal').classList.add('hidden');
@@ -407,10 +463,17 @@ function bindEvents() {
     if (f) window.api.reveal(f.path).catch((err) => toast(err.message, true));
   });
   $('#btnPreviewArchive').addEventListener('click', () => archiveCurrent());
+  $('#btnMarkMine').addEventListener('click', doMarkMine);
   $('#btnAiSummary').addEventListener('click', () => runAi('summary'));
   $('#btnAiRename').addEventListener('click', () => runAi('rename'));
   $('#btnAiTags').addEventListener('click', () => runAi('tags'));
   $('#btnAiCategory').addEventListener('click', () => runAi('category'));
+  $('#btnAiAdvise').addEventListener('click', doAiAdvise);
+  window.api.onAdviceProgress((p) => {
+    if (!state.adviseRunning) return;
+    const btn = $('#btnAiAdvise');
+    if (btn) btn.textContent = `${LANG === 'zh' ? '建议中' : 'Advising'} ${p.done}/${p.total} · ${LANG === 'zh' ? '点此停止' : 'click to stop'}`;
+  });
 
   $('#btnSettings').addEventListener('click', openSettings);
   $('#btnCloseSettings').addEventListener('click', closeSettings);
@@ -560,6 +623,7 @@ function renderAll() {
   renderList();
   renderCharts();
   renderPreviewEmpty();
+  updateAiAdviseBtn();
   maybeShowOnboard();
 }
 
@@ -971,10 +1035,13 @@ function rowCells(f) {
       }</div>`
     : '';
 
+  const adviceLabel = { keep: LANG === 'zh' ? '建议留' : 'Keep', clean: LANG === 'zh' ? '建议清' : 'Clean', unsure: '?' };
   const nameCell = `<div class="fname-wrap"><div class="fname">
     <span class="fext ${esc((f.ext || '').replace('.', ''))}">${esc(extLabel)}</span>
     <span class="fname-text" title="${esc(f.name)}">${esc(f.name)}</span>
     ${dup ? `<span class="dup-flag">${LANG === 'zh' ? '重复' : 'Dup'}</span>` : ''}
+    ${f.aiAdvice ? `<span class="advice-flag advice-${esc(f.aiAdvice.v)}" title="${LANG === 'zh' ? 'AI 建议（只建议，不执行）' : 'AI suggestion (advice only)'}：${esc(f.aiAdvice.r || '')}">${esc(adviceLabel[f.aiAdvice.v] || '?')}</span>` : ''}
+    ${f.mine ? `<span class="mine-flag">${LANG === 'zh' ? '我写的' : 'Mine'}</span>` : ''}
   </div>${hitLine}</div>`;
 
   if (state.view === 'knowledge') {
@@ -1223,7 +1290,7 @@ async function selectFile(id) {
 
   const cat = f.category || {};
   const chips = [
-    `<span class="meta-chip">${LANG === 'zh' ? '来源' : 'Source'} <b>${esc(
+    `<span class="meta-chip">${LANG === 'zh' ? 'AI 工具' : 'Source'} <b>${esc(
       sourceName(f)
     )}</b></span>`,
     `<span class="meta-chip">${LANG === 'zh' ? '分类' : 'Category'} <b>${esc(catLabel(f))}</b></span>`,
@@ -1239,7 +1306,25 @@ async function selectFile(id) {
     );
   }
   if (f.aiSummary) chips.push(`<span class="meta-chip" style="color:#4338ca">${t('prev.summary')} <b>${esc(f.aiSummary)}</b></span>`);
+  if (f.aiAdvice) {
+    const av = { keep: ['#15803d', '#f0fdf4', LANG === 'zh' ? '建议留' : 'Keep'], clean: ['#b91c1c', '#fef2f2', LANG === 'zh' ? '建议清' : 'Clean'], unsure: ['#6b7280', '#f3f4f6', LANG === 'zh' ? '看不准' : 'Unsure'] }[f.aiAdvice.v] || ['#6b7280', '#f3f4f6', '?'];
+    chips.push(
+      `<span class="meta-chip" style="color:${av[0]};background:${av[1]}" title="${LANG === 'zh' ? 'AI 只给建议，不会动文件' : 'AI advice only; nothing is touched'}">AI ${av[2]} <b>${esc(f.aiAdvice.r || '')}</b></span>`
+    );
+  }
+  if (f.mine) {
+    chips.push(
+      `<span class="meta-chip" style="color:#15803d;border-color:#bbf7d0;background:#f0fdf4">${LANG === 'zh' ? '你写的' : 'Yours'} <b>${LANG === 'zh' ? '自动整理不碰' : 'never auto-touched'}</b></span>`
+    );
+  }
+  if (f.inProject) {
+    chips.push(
+      `<span class="meta-chip" style="color:#92400e;border-color:#fde68a;background:#fffbeb">${LANG === 'zh' ? '项目内代码' : 'Project code'} <b>${LANG === 'zh' ? '只盘点不搬删' : 'inventory only'}</b></span>`
+    );
+  }
   $('#previewMeta').innerHTML = chips.join('');
+  const mineBtn = $('#btnMarkMine');
+  if (mineBtn) mineBtn.textContent = f.mine ? (LANG === 'zh' ? '撤销「我写的」标记' : 'Unmark as mine') : (LANG === 'zh' ? '这是我写的' : 'I wrote this');
 
   $('#previewText').textContent = t('prev.loading');
   const r = await window.api.preview(f.path);
@@ -1272,7 +1357,7 @@ async function ensureArchiveRoot() {
   if (root) return root;
   const docs = (state.appPaths && state.appPaths.documents) || '';
   if (!docs) return '';
-  root = `${docs}\\${LANG === 'zh' ? 'AI产出管家归档' : 'AI-Artifacts'}`;
+  root = `${docs}\\${LANG === 'zh' ? 'AI产出管家整理' : 'AI-Artifacts'}`;
   try {
     await window.api.configPatch({ archiveRoot: root });
     state.config = await window.api.configGet();
@@ -1320,94 +1405,422 @@ async function archiveCurrent() {
   }
 }
 
+/** 待确认桶的拦截原因，翻译成人话 */
+function tidyWhyText(why) {
+  const zh = {
+    'source-unknown': '认不出是 AI 产出的：不能证明，就不自动动',
+    'low-confidence': '没太大把握：只能你手动确认后再处理',
+    mine: '你标过「这是我写的」：任何自动整理都不碰',
+    'in-project': '项目内代码：只盘点，不搬不删（搬走会断依赖）'
+  };
+  const en = {
+    'source-unknown': 'Source unverified: not proven AI output',
+    'low-confidence': 'Not high-confidence: manual only',
+    mine: 'You marked it as yours: never auto-touched',
+    'in-project': 'Project code: inventory only, never moved'
+  };
+  return (LANG === 'zh' ? zh : en)[why] || why;
+}
+
 async function doOneClickOrganize() {
   if (!state.files.length) return toast(t('msg.scanFirstTidy'), true);
-
-  const keep = state.files.filter(
-    (f) => f.category && (f.category.group === 'knowledge' || f.category.group === 'tool')
-  );
-
-  // 只自动处理「完全相同」和规则判定的垃圾；「相似但不完全相同」一律不动，交给用户自己看
-  const exactDups = state.files.filter(
-    (f) => f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'exact'
-  );
-  const similarDups = state.files.filter(
-    (f) => f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'similar'
-  );
-  const junk = state.files.filter(
-    (f) => f.category && f.category.key === 'junk' && !(f.duplicate && f.duplicate.isDuplicate)
-  );
-
-  const trashMap = new Map();
-  for (const f of [...exactDups, ...junk]) trashMap.set(f.path, f);
-  const keepList = keep.filter((f) => !trashMap.has(f.path));
-  const trashList = Array.from(trashMap.values());
-
-  if (!keepList.length && !trashList.length) {
-    return toast(similarDups.length ? t('msg.tidyOnlySimilar') : t('msg.tidyNothing'));
-  }
-
-  const root = await ensureArchiveRoot();
-  if (!root) return toast(t('msg.noArchiveRoot'), true);
-
-  const sample = trashList.slice(0, 5).map((f) => `· ${f.name}`).join('\n');
-  const more =
-    trashList.length > 5
-      ? LANG === 'zh'
-        ? `\n…还有 ${trashList.length - 5} 个`
-        : `\n…and ${trashList.length - 5} more`
-      : '';
-  const similarNote = similarDups.length
-    ? LANG === 'zh'
-      ? `\n\n③ 另外有 ${similarDups.length} 个「相似但不完全相同」的文件，管家不会自动动它们，\n   你可以到「重复文件」页逐个看。`
-      : `\n\n3) ${similarDups.length} near-identical files are left alone.\n   Review them yourself in the Duplicates tab.`
-    : '';
-
-  const ok = window.confirm(
-    LANG === 'zh'
-      ? `管家准备这样做：\n\n` +
-          `① 把 ${keepList.length} 个「值得留的知识 / 能用的工具」移动到：\n${root}\n\n` +
-          `② 把 ${trashList.length} 个「完全相同 / 可以删的」删掉（进 Windows 回收站，能还原）：\n${sample}${more}` +
-          similarNote +
-          `\n\n确定就点「确定」，不确定就点「取消」。`
-      : `Here's the plan:\n\n` +
-          `1) Move ${keepList.length} files worth keeping to:\n${root}\n\n` +
-          `2) Delete ${trashList.length} identical/disposable files (they go to the Windows Recycle Bin, restorable):\n${sample}${more}` +
-          similarNote +
-          `\n\nHit OK to proceed, Cancel to stop.`
-  );
-  if (!ok) return;
-
   setBusy(true);
-  let archived = 0;
-  let trashed = 0;
+  let plan;
   try {
-    if (keepList.length) {
-      const r = await window.api.archive({
-        paths: keepList.map((f) => f.path),
-        targetDir: root
-      });
-      archived = r.ok;
-      removeFromState(r.done || [], false);
-    }
-    if (trashList.length) {
-      const r = await window.api.cleanupTrash({ paths: trashList.map((f) => f.path) });
-      trashed = r.ok;
-      if (r.done) removeFromState(r.done, false);
-      const stuck = (r.failed || []).length;
-      if (stuck) {
-        toast(
-          `有 ${stuck} 个删不掉——U 盘、网络盘、移动硬盘通常没有回收站，管家不敢硬删，已给你留着。`,
-          true
-        );
-      }
-    }
+    plan = await window.api.tidyPlan();
+  } catch (err) {
+    setBusy(false);
+    return toast(t('msg.tidyFail', { msg: err.message }), true);
+  }
+  setBusy(false);
+  const s = plan.stats;
+  if (!s.keep && !s.trash && !s.pending && !s.similar) return toast(t('msg.tidyNothing'));
+  openTidyModal(plan);
+}
+
+/**
+ * 全量清单确认框：默认是「预演」——只看不执行。
+ * 要删的每一个文件都列出来、可逐个取消勾选，不再只给 5 个名字盲签。
+ */
+function openTidyModal(plan) {
+  state.tidyPlan = plan;
+  const zh = LANG === 'zh';
+  $('#tidyTitle').textContent = zh ? '整理预案（预演，未动任何文件）' : 'Tidy plan (dry run, nothing touched)';
+  $('#tidyNote').innerHTML = plan.aiOnly
+    ? zh
+      ? '安全闸已开启：只有<b>确认是 AI 产出、把握大</b>的文件才会自动处理。其余进「待确认」，只能你手动勾。删除一律进 Windows 回收站，可还原；挪走的能一键退回原位。'
+      : 'Safety gate ON: only <b>verified AI output we are sure about</b> is auto-processed. Everything else waits for your manual pick. Deletions go to the Recycle Bin; moves can be undone.'
+    : zh
+      ? '⚠ 安全闸已关闭（调试模式）：认不出是 AI 产出的文件也会被自动处理。'
+      : '⚠ Safety gate OFF (debug): unverified files will be auto-processed.';
+
+  const body = $('#tidyBody');
+  const sections = [];
+
+  const rowHtml = (f, opts) => {
+    const o = opts || {};
+    const reason =
+      (f.duplicate && f.duplicate.isDuplicate && f.duplicate.kind === 'exact'
+        ? zh
+          ? `与「${f.duplicate.withName || ''}」完全重复`
+          : `Exact duplicate of "${f.duplicate.withName || ''}"`
+        : (f.category && f.category.reason) || '');
+    return (
+      `<div class="trash-item tidy-item${o.pending ? ' tidy-pending' : ''}">` +
+      (o.checkbox ? `<input type="checkbox" data-tidy-path="${esc(f.path)}" checked>` : '') +
+      `<div class="ti-main"><div class="ti-name">${esc(f.name)}</div>` +
+      `<div class="ti-path" title="${esc(f.path)}">${esc(f.path)}</div>` +
+      (o.why ? `<div class="tidy-why">${esc(o.why)}</div>` : reason ? `<div class="ti-path">${esc(reason)}</div>` : '') +
+      `</div><span class="ti-size">${fmtSize(f.size)}</span></div>`
+    );
+  };
+
+  if (plan.keep.length) {
+    sections.push(
+      `<div class="trash-batch"><div class="tidy-section-head">${zh ? '① 整理留存（挪到你选的整理目录）' : '1) Keepers (moved to your tidy folder)'}<span class="ts-count">${plan.keep.length}</span></div>` +
+        plan.keep.map((f) => rowHtml(f)).join('') +
+        '</div>'
+    );
+  }
+  if (plan.trash.length) {
+    sections.push(
+      `<div class="trash-batch"><div class="tidy-section-head">${zh ? '② 清理（进 Windows 回收站，可还原）——逐个看过再执行' : '2) Clean (to Recycle Bin, restorable) — review each one'}<span class="ts-count" id="tidyTrashCount">${plan.trash.length}</span></div>` +
+        plan.trash.map((f) => rowHtml(f, { checkbox: true })).join('') +
+        '</div>'
+    );
+  }
+  if (plan.pending.length) {
+    sections.push(
+      `<div class="trash-batch"><div class="tidy-section-head">${zh ? '③ 待确认（安全闸拦下，只能手动处理）' : '3) Needs your confirmation (blocked by safety gate)'}<span class="ts-count">${plan.pending.length}</span></div>` +
+        plan.pending.map((p) => rowHtml(p.file, { pending: true, why: tidyWhyText(p.why) })).join('') +
+        '</div>'
+    );
+  }
+  if (plan.similar.length) {
+    sections.push(
+      `<div class="trash-batch"><div class="tidy-section-head">${zh ? '④ 相似但不完全相同（永不自动删，去「重复的」页自己看）' : '4) Near-identical (never auto-deleted; review in Duplicates tab)'}<span class="ts-count">${plan.similar.length}</span></div></div>`
+    );
+  }
+  body.innerHTML = sections.join('');
+
+  // 勾选变化实时更新计数，让用户知道勾掉了多少
+  body.querySelectorAll('input[data-tidy-path]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const n = body.querySelectorAll('input[data-tidy-path]:checked').length;
+      const el = $('#tidyTrashCount');
+      if (el) el.textContent = n;
+    });
+  });
+
+  const canRun = plan.keep.length || plan.trash.length;
+  $('#btnTidyRun').disabled = !canRun;
+  $('#tidyHint').textContent = canRun
+    ? zh
+      ? '现在是预演：只看清单，不动任何文件。确认无误再点右边执行。'
+      : 'Dry run: nothing is touched until you hit Execute.'
+    : zh
+      ? '没有可自动执行的项——待确认的请回列表手动勾选处理。'
+      : 'Nothing auto-executable — handle pending items manually in the list.';
+  $('#tidyModal').classList.remove('hidden');
+}
+
+async function runTidyPlan() {
+  const plan = state.tidyPlan;
+  if (!plan) return;
+  const checked = Array.from($('#tidyBody').querySelectorAll('input[data-tidy-path]:checked')).map((cb) =>
+    cb.getAttribute('data-tidy-path')
+  );
+  const keepPaths = plan.keep.map((f) => f.path);
+  if (!keepPaths.length && !checked.length) {
+    $('#tidyModal').classList.add('hidden');
+    return;
+  }
+  const root = await ensureArchiveRoot();
+  if (keepPaths.length && !root) return toast(t('msg.noArchiveRoot'), true);
+
+  $('#tidyModal').classList.add('hidden');
+  setBusy(true);
+  try {
+    const out = await window.api.tidyRun({ keepPaths, trashPaths: checked, targetDir: root });
+    if (out.done) removeFromState(out.done, false);
     renderAll();
-    toast(t('msg.tidyDone', { a: archived, t: trashed }));
+    toast(t('msg.tidyDone', { a: out.archived, t: out.trashed }));
+    const stuck = (out.failed || []).length;
+    if (stuck) {
+      toast(
+        LANG === 'zh'
+          ? `有 ${stuck} 个没动成——U 盘、网络盘通常没有回收站，管家不敢硬删，已给你留着。`
+          : `${stuck} items were left untouched (no Recycle Bin on removable/network drives).`,
+        true
+      );
+    }
+    const blocked = (out.skipped || []).filter((s) => s.reason);
+    if (blocked.length) {
+      toast(
+        LANG === 'zh' ? `${blocked.length} 个被安全闸拦下，未处理。` : `${blocked.length} items blocked by the safety gate.`,
+        true
+      );
+    }
   } catch (err) {
     toast(t('msg.tidyFail', { msg: err.message }), true);
   } finally {
     setBusy(false);
+    state.tidyPlan = null;
+  }
+}
+
+/* ================= v0.8 一键瘦身（三档责任）＋ 回收箱 =================
+   一档：逐字节相同的副本，直接删进系统回收站（正本必在）；
+   二档：版本链——用户按「组」点头「删旧版本」才删，没点头的一组不动；
+   三档：拿不准的只收进回收箱，不删任何东西，随时放回。
+   术语对小白全部译成大实话；这套界面不出现哈希/置信/来源等词。 */
+
+let tierPlan = null;
+const tierApproved = new Set();
+let stashCount = 0;
+
+function closeSlimModal() {
+  $('#slimModal').classList.add('hidden');
+}
+
+function closeStashModal() {
+  $('#stashModal').classList.add('hidden');
+}
+
+async function doSlim() {
+  if (!state.files.length) return toast(t('msg.scanFirstTidy'), true);
+  setBusy(true);
+  let plan;
+  try {
+    plan = await window.api.tierPlan();
+  } catch (err) {
+    setBusy(false);
+    return toast(String((err && err.message) || err), true);
+  }
+  setBusy(false);
+  const s = plan.stats;
+  if (!s.dupes && !s.chainCards && !s.stash) return toast('没找到要收拾的，你这挺干净。');
+  tierPlan = plan;
+  tierApproved.clear();
+  $('#slimModal').classList.remove('hidden');
+  renderSlimBody();
+}
+
+function renderSlimBody() {
+  if (!tierPlan) return;
+  const s = tierPlan.stats;
+  $('#slimNote').innerHTML =
+    '工具按「有多少把握」决定动手的轻重：<b>完全相同的重复</b>直接删（删的是副本，正本都还在）；' +
+    '<b>同一个文件的多个旧版本</b>要你每组点一下「删旧版本」才删；<b>其余拿不准的</b>只收进回收箱，<b>不删除任何东西</b>，随时放回。';
+
+  const parts = [];
+  if (s.dupes) {
+    parts.push(
+      `<div class="tier-sec"><div class="tidy-section-head">完全重复：${s.dupes} 个副本（约 ${fmtSize(
+        s.freedBytes
+      )}）</div><div class="tier-sec-body">内容和正本逐字节相同，正本一个都不动。处理时副本直接放进系统回收站，不用你确认每一个。</div></div>`
+    );
+  }
+  if (tierPlan.chains.length) {
+    const cards = tierPlan.chains
+      .map((c) => {
+        const key = `${c.family}|${c.ext}`;
+        const on = tierApproved.has(key);
+        const olderNames = c.older.map((f) => esc(f.name)).join('、');
+        const act = on
+          ? `<span class="chain-approved">已选：删掉 ${c.older.length} 个旧版本</span> <button type="button" class="btn btn-ghost btn-sm" data-slim-chain="${esc(
+              key
+            )}" data-slim-act="revoke">再想想</button>`
+          : `<button type="button" class="btn btn-primary btn-sm" data-slim-chain="${esc(
+              key
+            )}" data-slim-act="approve">删旧版本，留最新</button>`;
+        return `<div class="chain-card${on ? ' approved' : ''}">
+            <div class="chain-head"><b>${esc(c.family)}${esc(c.ext)}</b><span class="chain-sub">${
+          c.memberCount
+        } 个版本 · 最新是 ${esc(c.keeper.name)}</span></div>
+            <div class="chain-old">旧版本：${olderNames}</div>
+            <div class="chain-act">${act}</div>
+          </div>`;
+      })
+      .join('');
+    parts.push(
+      `<div class="tier-sec"><div class="tidy-section-head">同一个文件攒了多个版本：${s.chainCards} 组（${s.chainOlder} 个旧的）</div>${cards}</div>`
+    );
+  }
+  if (s.stash) {
+    parts.push(
+      `<div class="tier-sec"><div class="tidy-section-head">拿不准的：${s.stash} 个</div><div class="tier-sec-body">看着像一次性的，但没有百分百把握。收进<b>回收箱</b>（挪出你视线、<b>不删除</b>），点开回收箱随时放回。</div></div>`
+    );
+  }
+  $('#slimBody').innerHTML = parts.join('');
+
+  const olderApproved = tierPlan.chains
+    .filter((c) => tierApproved.has(`${c.family}|${c.ext}`))
+    .reduce((n, c) => n + c.older.length, 0);
+  const total = s.dupes + olderApproved + s.stash;
+  $('#slimHint').textContent = `现在：删 ${s.dupes + olderApproved} 个（都进系统回收站）· 收 ${s.stash} 个（不删）。没点头的版本组不会动。`;
+  $('#btnSlimRun').textContent = total > 0 ? `处理这 ${total} 个` : '没可处理的';
+  $('#btnSlimRun').disabled = total === 0;
+}
+
+async function runSlim() {
+  if (!tierPlan) return;
+  const approvedChains = [...tierApproved];
+  setBusy(true);
+  let out;
+  try {
+    out = await window.api.tierRun({ approvedChains });
+  } catch (err) {
+    setBusy(false);
+    return toast('瘦身失败：' + ((err && err.message) || err), true);
+  }
+  setBusy(false);
+  closeSlimModal();
+  tierPlan = null;
+  try {
+    const scan = await window.api.lastScan();
+    if (scan && scan.files) applyScan(scan);
+  } catch {
+    /* 刷新失败不影响结果 */
+  }
+  const bits = [];
+  if (out.dupTrashed) bits.push(`删了 ${out.dupTrashed} 个重复`);
+  if (out.chainTrashed) bits.push(`删了 ${out.chainTrashed} 个旧版本`);
+  if (out.stashed) bits.push(`收起了 ${out.stashed} 个（没删，回收箱随时放回）`);
+  toast('处理好了：' + (bits.join('，') || '其实没什么可动的'));
+  if (out.failed && out.failed.length) toast(`有 ${out.failed.length} 个没动成（文件可能已经不在原位置）。`, true);
+  if (out.skipped && out.skipped.length) toast(`另有 ${out.skipped.length} 个被保护规则挡下，没碰。`);
+}
+
+async function openStashModal() {
+  setBusy(true);
+  let r;
+  try {
+    r = await window.api.stashList();
+  } catch (err) {
+    setBusy(false);
+    return toast(String((err && err.message) || err), true);
+  }
+  setBusy(false);
+  renderStashBody(r);
+  $('#slimModal').classList.add('hidden');
+  $('#stashModal').classList.remove('hidden');
+}
+
+function renderStashBody(r) {
+  const items = (r && r.items) || [];
+  stashCount = items.length;
+  const empty = !items.length;
+  $('#stashNote').innerHTML = empty
+    ? '回收箱是空的。工具只把<b>拿不准</b>的 AI 文件收在这儿——这里的东西<b>永远不会自动删</b>，放不放回、清不清空都由你。'
+    : `收着 <b>${items.length}</b> 个（约 ${fmtSize(r.stats.size)}）。放回＝搬回原位置（原位有了同名文件会加个序号，绝不覆盖）；<b>清空才会进系统回收站</b>，在那之前还能救。`;
+  $('#stashBody').innerHTML = items
+    .map(
+      (it) =>
+        `<div class="trash-item tidy-item"><span class="stash-name">${esc(it.name || '')}</span><span class="tidy-why">原来在 ${esc(
+          it.from || ''
+        )}</span><button type="button" class="btn btn-ghost btn-sm" data-stash-restore="${esc(it.id)}">放回</button></div>`
+    )
+    .join('');
+  $('#btnStashRestoreAll').disabled = empty;
+  $('#btnStashEmpty').disabled = empty;
+}
+
+async function restoreStash(ids) {
+  setBusy(true);
+  let r;
+  try {
+    r = await window.api.stashRestore(ids ? { ids } : {});
+  } catch (err) {
+    setBusy(false);
+    return toast('放回失败：' + ((err && err.message) || err), true);
+  }
+  setBusy(false);
+  if (r.ok) toast(`放回了 ${r.ok} 个，回到原来的位置。`);
+  else if (r.skipped && r.skipped.length) toast('这几个没放回去：' + (r.skipped[0].reason || ''), true);
+  try {
+    const [list, scan] = await Promise.all([window.api.stashList(), window.api.lastScan()]);
+    renderStashBody(list);
+    if (scan && scan.files) applyScan(scan);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function restoreAllStash() {
+  if (!stashCount) return toast('回收箱是空的。');
+  await restoreStash(null);
+}
+
+async function emptyStash() {
+  if (!stashCount) return toast('回收箱是空的。');
+  const sure = window.confirm(
+    `清空回收箱？\n里面的 ${stashCount} 个文件会放进 Windows 系统回收站——在你清空系统回收站之前，还能从那儿找回来。\n工具自己不会彻底删除任何文件。`
+  );
+  if (!sure) return;
+  setBusy(true);
+  let r;
+  try {
+    r = await window.api.stashEmpty();
+  } catch (err) {
+    setBusy(false);
+    return toast('清空失败：' + ((err && err.message) || err), true);
+  }
+  setBusy(false);
+  toast(`已把 ${r.ok} 个放进系统回收站。`);
+  if (r.failed && r.failed.length) toast(`有 ${r.failed.length} 个没放进去（U 盘/网络盘通常没有回收站），留在回收箱里没动。`, true);
+  try {
+    renderStashBody(await window.api.stashList());
+  } catch {
+    /* ignore */
+  }
+}
+
+async function doUndoArchive() {
+  const zh = LANG === 'zh';
+  if (
+    !window.confirm(
+      zh
+        ? '把最近一次整理挪走的文件，整批搬回原位置？\n（原位置已有同名文件时会自动加序号，不会覆盖）'
+        : 'Move the last archived batch back to original locations?\n(Name collisions get a suffix; nothing is overwritten.)'
+    )
+  )
+    return;
+  setBusy(true);
+  try {
+    const r = await window.api.archiveUndo();
+    if (r.empty) return toast(zh ? '没有可退回的整理记录。' : 'No tidy batch to undo.', true);
+    toast(
+      zh ? `已还原 ${r.ok} 个文件回原位置${r.failed.length ? `，${r.failed.length} 个失败` : ''}。重新扫描即可看到。` : `Restored ${r.ok} files${r.failed.length ? `, ${r.failed.length} failed` : ''}. Rescan to see them.`
+    );
+  } catch (err) {
+    toast(t('msg.archiveFail', { msg: err.message }), true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+/** 「这是我写的」：一键打标/撤销，持久化，重扫不抹 */
+async function doMarkMine() {
+  const f = currentFile();
+  if (!f) return;
+  const on = !f.mine;
+  try {
+    const r = await window.api.markMine({ path: f.path, mine: on });
+    f.mine = r.mine;
+    selectFile(f.id);
+    renderAll();
+    toast(
+      r.mine
+        ? LANG === 'zh'
+          ? '已标记「这是我写的」：任何自动整理都不会碰它。'
+          : 'Marked as yours: auto-tidy will never touch it.'
+        : LANG === 'zh'
+          ? '已撤销标记。'
+          : 'Mark removed.'
+    );
+  } catch (err) {
+    toast(err.message, true);
   }
 }
 
@@ -1538,6 +1951,53 @@ async function renderTrash() {
   }
 }
 
+/* ---------------- v0.8 M3 管家小报：本机月度四个数字 + 服务入口 ---------------- */
+
+/** 字节说成人话（和 src/digest.js 同一口径，别让用户看见 B/KB 打架） */
+function fmtBytesPlain(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return `${v} B`;
+  if (v < 1024 * 1024) return `${Math.round(v / 1024)} KB`;
+  if (v < 1024 * 1024 * 1024) return `${(v / 1024 / 1024).toFixed(1)} MB`;
+  return `${(v / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+async function openDigestModal() {
+  $('#digestModal').classList.remove('hidden');
+  await renderDigest();
+}
+
+function closeDigestModal() {
+  $('#digestModal').classList.add('hidden');
+}
+
+async function renderDigest() {
+  const note = $('#digestNote');
+  const cards = $('#digestCards');
+  const week = $('#digestWeek');
+  note.textContent = '正在算这个月的账…';
+  cards.innerHTML = '';
+  week.textContent = '';
+  try {
+    const d = await window.api.digestGet();
+    const m = d.month || {};
+    note.textContent = d.monthLine || '';
+    cards.innerHTML = [
+      { n: m.removed || 0, label: '收进回收箱', tip: '随时能放回原位置' },
+      { n: m.restored || 0, label: '放回原位', tip: '你反悔了，管家照办' },
+      { n: fmtBytesPlain(m.freedBytes || 0), label: '腾出空间', tip: '删掉的都进了系统回收站，还能反悔' },
+      { n: m.kept || 0, label: '收进整理目录', tip: '没删，只是挪到了一起' }
+    ]
+      .map(
+        (c) => `<div class="digest-card"><div class="dc-num">${esc(String(c.n))}</div><div class="dc-label">${esc(c.label)}</div><div class="dc-tip">${esc(c.tip)}</div></div>`
+      )
+      .join('');
+    week.textContent = d.trayLine || '';
+  } catch (err) {
+    note.textContent = `算不出来：${err.message}`;
+  }
+}
+
 function recomputeSummary() {
   const files = state.files;
   const bySource = {};
@@ -1597,14 +2057,75 @@ function ensureAi() {
 /** 第一次用 AI 前说明：内容会发给所配置的 AI 服务，本地模型则不出本机 */
 function aiPrivacyConfirmed() {
   try {
-    if (localStorage.getItem('aiPrivacyConfirmed') === '1') return true;
+    if (localStorage.getItem('aiPrivacyConfirmed2') === '1') return true;
     const ok = window.confirm(
-      '提醒一下：\n\nAI 摘要 / 起名 / 打标签会把文件开头的内容，发给你在设置里配置的 AI 服务。\n\n如果连的是本机 Ollama 或 LM Studio，内容不出这台电脑；\n如果填的是远程 API，内容会发送到那家服务商。\n\n继续吗？'
+      '提醒一下：\n\nAI 摘要 / 起名 / 打标签 / 批量建议会把文件开头的内容，发给你在设置里配置的 AI 服务。\n\n如果连的是本机 Ollama 或 LM Studio，内容不出这台电脑；\n如果填的是远程 API，内容会发送到那家服务商。\n\nAI 只给建议，不会自动动任何文件。\n\n继续吗？'
     );
-    if (ok) localStorage.setItem('aiPrivacyConfirmed', '1');
+    if (ok) localStorage.setItem('aiPrivacyConfirmed2', '1');
     return ok;
   } catch {
     return true;
+  }
+}
+
+/** AI 批量建议入口：没配 AI 时整个隐藏（离线基层不需要它） */
+function updateAiAdviseBtn() {
+  const btn = $('#btnAiAdvise');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !aiConfigured());
+  if (state.adviseRunning) {
+    btn.textContent = LANG === 'zh' ? '停止建议' : 'Stop advising';
+  } else {
+    btn.textContent = LANG === 'zh' ? 'AI 批量建议' : 'AI batch advice';
+  }
+}
+
+/**
+ * AI 批量建议：对当前勾选（没勾就对当前列表）逐个要一句判断。
+ * 只写建议列，不改分类、不动文件；哈希缓存命中不重问；中途可停，停了不丢已判的。
+ */
+async function doAiAdvise() {
+  if (state.adviseRunning) {
+    await window.api.aiAdviseCancel();
+    return;
+  }
+  if (!state.files.length) return toast(t('msg.scanFirstTidy'), true);
+  if (!ensureAi()) return;
+  if (!aiPrivacyConfirmed()) return;
+
+  const picked = selectedPaths();
+  const targets = picked.length
+    ? state.files.filter((f) => state.selection.has(f.id))
+    : state.filtered.slice(0, 500); // 没勾就对当前视图，最多 500 个免得本地模型跑一夜
+  if (!targets.length) return toast(t('msg.pickFiles'), true);
+
+  state.adviseRunning = true;
+  updateAiAdviseBtn();
+  try {
+    const r = await window.api.aiAdvise({ paths: targets.map((f) => f.path) });
+    // 主进程把建议随结果带回来，同步到本地文件对象（分类一个字都不会变）
+    const byPath = new Map(state.files.map((f) => [f.path, f]));
+    for (const item of r.advice || []) {
+      const local = byPath.get(item.path);
+      if (local && item.advice) local.aiAdvice = item.advice;
+    }
+    renderAll();
+    if (state.currentId) selectFile(state.currentId);
+    const zh = LANG === 'zh';
+    toast(
+      r.stopped
+        ? zh
+          ? `已停止：新判 ${r.judged} 个，缓存 ${r.cached} 个，剩下的下次接着判。`
+          : `Stopped: ${r.judged} new, ${r.cached} cached. The rest resumes next time.`
+        : zh
+          ? `建议完成：新判 ${r.judged}，缓存命中 ${r.cached}${r.failed ? `，${r.failed} 个没判成可重试` : ''}。只是建议，文件一个没动。`
+          : `Done: ${r.judged} new, ${r.cached} cached${r.failed ? `, ${r.failed} retryable` : ''}. Advice only — nothing touched.`
+    );
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    state.adviseRunning = false;
+    updateAiAdviseBtn();
   }
 }
 
@@ -1656,7 +2177,7 @@ async function runAi(kind) {
       const map = {
         knowledge: '知识库沉淀（建议长期留存）',
         'tool-common': '常用工具（建议留存到工具库）',
-        'tool-onetime': '一次性脚本（可归档或清理）',
+        'tool-onetime': '一次性脚本（可整理或清理）',
         junk: '冗余可删（建议清理）'
       };
       box.innerHTML = r.category
@@ -1816,7 +2337,7 @@ async function openSettings() {
   const c = state.config || (await window.api.configGet());
   state.config = c;
 
-  const langSel = $('#setLang');
+  const langSel = $('#setLang'); // v0.8 起界面已无此控件，留着只为兼容旧截图工具
   if (langSel) langSel.value = (c.ui && c.ui.lang) || '';
   $('#setArchiveRoot').value = c.archiveRoot || '';
   $('#setMaxDepth').value = c.maxDepth || 14;

@@ -17,8 +17,10 @@ function safeFileName(input, fallbackExt) {
   if (!name) return null;
 
   // 先按路径拆出最后一段（Windows 的 \ 和 Unix 的 / 都认），再做字符清洗
+  // \x00-\x1f 全段控制字符都要清：NUL 会被 Win32 截断（"a\x00.md" 实际落盘成 "a"），
+  // \r\n 会把日志/CSV 断行，其余控制字符在资源管理器里表现为乱码
   name = name.replace(/\\/g, '/').split('/').pop() || '';
-  name = name.replace(/[\\/:*?"<>|\r\n\t]/g, '');
+  name = name.replace(/[\x00-\x1f\\/:*?"<>|]/g, '');
   name = name.replace(/^\.+/, '');
   name = name.replace(/[. ]+$/g, '');
   name = name.slice(0, 120);
@@ -42,4 +44,41 @@ function isInside(root, target) {
   return t === r || t.startsWith(r + path.sep);
 }
 
-module.exports = { safeFileName, isInside, RESERVED };
+// 盘符根下这些顶层目录一律不写：写进去不是用户想要的结果，且多半等于提权/持久化
+const SYSTEM_TOP = new Set([
+  'windows',
+  'program files',
+  'program files (x86)',
+  'programdata',
+  '$recycle.bin',
+  'system volume information',
+  'recovery',
+  'perflogs',
+  'boot',
+  'config.msi',
+  '$windows.~bt',
+  '$windows.~ws'
+]);
+
+/**
+ * 受保护路径：程序绝不主动写入的位置（系统目录、盘符根本身）。
+ * 用于「撤销归档」「放回回收箱」这类要把文件搬回任意原路径的动作——
+ * 账本一旦被本机其他程序改写，这里是最后一道闸。
+ */
+function isProtectedPath(target) {
+  const raw = String(target == null ? '' : target);
+  if (!raw) return true;
+  const t = path.resolve(raw);
+  const root = path.parse(t).root;
+  const parts = t.slice(root.length).split(path.sep).filter(Boolean);
+  if (!parts.length) return true; // 盘符根本身
+  if (SYSTEM_TOP.has(parts[0].toLowerCase())) return true;
+  const sysRoot = process.env.SystemRoot || process.env.windir || '';
+  if (sysRoot) {
+    const sr = path.resolve(sysRoot).toLowerCase();
+    if (t.toLowerCase() === sr || t.toLowerCase().startsWith(sr + path.sep)) return true;
+  }
+  return false;
+}
+
+module.exports = { safeFileName, isInside, isProtectedPath, RESERVED };

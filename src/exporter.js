@@ -56,8 +56,17 @@ function summaryBlock(summary) {
     lines.push('');
     lines.push('| 来源 | 文件数 | 占用 |');
     lines.push('| --- | ---: | --- |');
+    // 对外只有两类（AI 工具/未识别）：汇总也要按类合并，具体厂商名不出现在导出里（口径与列表一致）
+    const merged = new Map();
     for (const s of summary.bySource) {
-      lines.push(`| ${s.name} | ${s.count} | ${fmtSize(s.size)} |`);
+      const label = sourceLabel({ id: s.id });
+      const cur = merged.get(label) || { count: 0, size: 0 };
+      cur.count += s.count;
+      cur.size += s.size;
+      merged.set(label, cur);
+    }
+    for (const [label, v] of merged) {
+      lines.push(`| ${label} | ${v.count} | ${fmtSize(v.size)} |`);
     }
     lines.push('');
   }
@@ -65,7 +74,12 @@ function summaryBlock(summary) {
 }
 
 function escapeCell(text) {
-  return String(text == null ? '' : text).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  // 竖线撑破表格、换行断行、< > 被当 HTML 标签执行（文件名/AI 摘要都可能是外部内容）
+  return String(text == null ? '' : text)
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, ' ')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function toMarkdown(files, summary) {

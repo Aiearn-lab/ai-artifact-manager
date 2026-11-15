@@ -169,9 +169,14 @@ function createHandler(options) {
       const args = p.arguments || {};
       const index = loadIndex(indexPath);
 
+      // 参数一律先过类型闸：AI 客户端什么形状都可能传（对象/数组/带 toString 的对象），
+      // String({toString:'x'}) 会直接抛 "Cannot convert object to primitive value"，
+      // 一个烂参数就能把整个调用打成 500——这不是错误处理，是缺校验。
+      const str = (v) => (typeof v === 'string' ? v : '');
+
       if (name === 'search_files') {
-        const q = String(args.query || '').trim().toLowerCase();
-        if (!q) return errorResult('query 不能为空');
+        const q = str(args.query).trim().toLowerCase();
+        if (!q) return errorResult('query 不能为空（需要字符串）');
         const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 200);
         const hits = index.files.filter((f) => matchFile(f, q)).slice(0, limit);
         if (!hits.length) return textResult(`没有找到包含「${args.query}」的文件。索引共 ${index.files.length} 个文件。`);
@@ -182,8 +187,8 @@ function createHandler(options) {
       }
 
       if (name === 'get_file_summary') {
-        const target = String(args.path || '');
-        if (!target) return errorResult('path 不能为空');
+        const target = str(args.path);
+        if (!target) return errorResult('path 不能为空（需要字符串）');
         const f = index.files.find((x) => path.resolve(x.path) === path.resolve(target));
         if (!f) return errorResult('这个文件不在当前索引里。请先在软件里扫描一次，或确认路径是否正确。');
         let head = '';
@@ -197,7 +202,7 @@ function createHandler(options) {
       }
 
       if (name === 'list_by_category') {
-        const cat = String(args.category || 'all');
+        const cat = str(args.category) || 'all';
         // 传错分类名不能静默返回全部文件——那是误导，直接报错
         if (!['knowledge', 'tool', 'junk', 'all'].includes(cat)) {
           return errorResult(`未知分类：${cat}。可用值：knowledge / tool / junk / all`);
@@ -216,18 +221,23 @@ function createHandler(options) {
       }
 
       if (name === 'archive_files') {
-        const paths = Array.isArray(args.paths) ? args.paths : [];
-        if (!paths.length) return errorResult('paths 不能为空');
+        const paths = (Array.isArray(args.paths) ? args.paths : []).filter((x) => typeof x === 'string' && x.trim());
+        if (!paths.length) return errorResult('paths 不能为空（需要字符串路径数组）');
         const root = String(getDefaultArchiveRoot() || '').trim();
         if (!root) return errorResult('没有归档目录：请先在软件设置里配置默认归档路径。');
-        if (args.targetDir && path.resolve(String(args.targetDir)) !== path.resolve(root)) {
+        // targetDir 只接受字符串：非字符串直接拒绝，不做隐式转换
+        if (args.targetDir !== undefined && args.targetDir !== null && typeof args.targetDir !== 'string') {
+          return errorResult('targetDir 必须是字符串路径');
+        }
+        const targetDir = typeof args.targetDir === 'string' ? args.targetDir.trim() : '';
+        if (targetDir && path.resolve(targetDir) !== path.resolve(root)) {
           return errorResult(`出于安全考虑，MCP 只能归档到软件里配置的目录：${root}`);
         }
 
         const picked = [];
         const missing = [];
         for (const pth of paths) {
-          const f = index.files.find((x) => path.resolve(x.path) === path.resolve(String(pth)));
+          const f = index.files.find((x) => path.resolve(String(x.path)) === path.resolve(pth));
           if (f) picked.push(f);
           else missing.push(pth);
         }

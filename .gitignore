@@ -1,5 +1,5 @@
 node_modules/
-dist/
+dist*/
 build_v*/
 release/
 _build_residue/

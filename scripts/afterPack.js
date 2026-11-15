@@ -10,6 +10,12 @@
  * 注意：只能用 rcedit 改「标准 Electron exe」（win-unpacked 里的那个）。
  * 不能拿它改已经打好的 portable 外壳——那是 NSIS 自解压格式，
  * 主体数据挂在 PE 后面，rcedit 重写 PE 会把那部分丢掉（100MB 变 60KB）。
+ *
+ * 现状（2026-11-12 M4 核对）：本钩子没有在 package.json 的 build 里挂上（build.afterPack 缺省），
+ * 因为 0.6.x 起 electron-builder 自带的 resEdit 已经能正常写图标与版本信息，实测产物版本正确。
+ * 保留它的唯一理由是：那个 UNKNOWN error 万一复发，把 build.win.signAndEditExecutable 设成
+ * false、再加一行 "afterPack": "scripts/afterPack.js" 就能切回来。
+ * 版本号一律从 package.json 读，别再写死（写死过一次 0.4.0.0，属于埋雷）。
  */
 
 const { execFileSync } = require('child_process');
@@ -51,13 +57,17 @@ exports.default = async function afterPack(context) {
   const exeRel = path.relative(root, exe);
   const iconRel = path.relative(root, icon);
 
+  // 版本信息与 package.json 对齐（四段式，rcedit 要 x.y.z.0 形态）
+  const pkg = require(path.join(root, 'package.json'));
+  const ver = `${pkg.version}.0`;
+
   execFileSync(rceditTmp, [
     exeRel,
     '--set-icon', iconRel,
-    '--set-file-version', '0.4.0.0',
-    '--set-product-version', '0.4.0.0',
+    '--set-file-version', ver,
+    '--set-product-version', ver,
     '--set-version-string', 'ProductName', 'AI产出管家',
-    '--set-version-string', 'FileDescription', 'AI产出管家 - 专门管理 AI 生成的文件',
+    '--set-version-string', 'FileDescription', 'AI产出管家 - 专门管理 AI 产出文件的本地工具',
     '--set-version-string', 'CompanyName', '智维工作室 Zhiwei Studio',
     '--set-version-string', 'LegalCopyright', 'Copyright © 2026 智维工作室'
   ], { cwd: root, stdio: 'pipe' });
