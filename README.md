@@ -5,7 +5,7 @@
   <p>
     <img alt="MIT" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-0.8.1-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-0.8.2-6366f1">
     <img alt="no cloud" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p><b>中文</b> · <a href="README.en.md">English</a></p>
@@ -38,7 +38,7 @@
 - **回收箱**：被收起来的文件随时能看、随时放回，无期限；清空永远是你的可选项，不是到期自动执行
 - **常驻小报**：系统托盘里一句话周报（这周 AI 又生了多少、哪些可以让管家收走），界面里「小报」页给本月四个数字：收走 / 放回 / 腾出 / 留下。数字只从你这台电脑的本地记录算，**零遥测**
 - **整理**：想留的文件也能一键归档到指定目录（只移动，没有复制，越整越少）
-- **重复查找**：完全重复（SHA-256 全文哈希）+ 高度相似（3-gram 相似度）都能找出来，推荐保留哪份；删除进 Windows 回收站，可还原
+- **重复查找**：完全重复（SHA-256 全文哈希）+ 高度相似（3-gram 相似度）都能找出来，推荐保留哪份；删除进 Windows 回收站，可还原。**页面上会逐行标明「会自动清」还是「需你判断」**——内容一样但落在项目文件夹里的（比如同一个 `package.json` 在源码和发布目录各一份），工具只提示、不动手，删不删你定
 - **搜内容**：想不起文件名，搜正文里的词，命中那句直接高亮
 - **自动监控**：盯住指定文件夹，AI 新写出的文件几秒内认出来、分好类（只提示，不动手）
 - **接自己的 AI（可选）**：一键连 Ollama / LM Studio，或填自己的 API 密钥，解锁摘要、智能重命名、两版比对。不接也全能用

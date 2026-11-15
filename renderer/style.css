@@ -431,6 +431,19 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 .cat-junk { background: #fef2f2; color: #dc2626; }
 .cat-other { background: #f3f4f6; color: #6b7280; }
 
+/* 重复文件页：这份副本会不会被自动清掉 */
+.dup-flag {
+  display: inline-flex; align-items: center;
+  margin-left: 6px;
+  font-size: 11px; font-weight: 650;
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  cursor: help;
+}
+.dup-flag-auto { background: #ecfdf5; color: #059669; }
+.dup-flag-manual { background: #f3f4f6; color: #6b7280; }
+
 .tag-chip {
   display: inline-block;
   font-size: 11px;

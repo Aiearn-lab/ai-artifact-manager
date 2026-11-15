@@ -11,6 +11,11 @@ const {
 const KNOWLEDGE_EXT = new Set(['.md', '.markdown', '.rst', '.txt']);
 const CONFIG_EXT = new Set(['.json', '.jsonc', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.env']);
 
+// 启动器：双击就跑的入口文件。它们天生只有一两行、天生写死路径，
+// 按代码量的评分必然被打成「一次性脚本」——但删了用户就不知道怎么启动。
+const LAUNCHER_EXT = new Set(['.bat', '.cmd', '.sh', '.ps1']);
+const LAUNCHES_OTHER = /[\w.-]+\.(py|js|mjs|exe|ps1|bat|cmd|sh|vbs|jar)\b/i;
+
 const THEME_WORDS = [
   '报告', '调研', '方案', '教程', '笔记', '分析', '总结', '复盘', '设计', '计划',
   '数据', '代码', '脚本', '爬虫', '自动化', 'API', '文档', '测试', '部署', '配置',
@@ -111,6 +116,12 @@ function classify(file) {
 
   // 3) 工具脚本
   if (isCodeExt(ext)) {
+    // 启动器（.bat/.cmd/.sh/.ps1 里调别的脚本）：天生只有一两行、天生带绝对路径，
+    // 按下面的评分必然被打成「一次性脚本」——用户点一下就被搬进回收箱，然后找不到怎么开。
+    // 这类文件是入口，不是一次性脚本。
+    if (LAUNCHER_EXT.has(ext) && LAUNCHES_OTHER.test(head || '')) {
+      return tool(true, '启动器：这是启动入口，删了会找不到从哪里开始', tags, 'high');
+    }
     const s = codeSignals(head);
     let commonScore = 0;
     let oneoffScore = 0;

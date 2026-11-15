@@ -42,10 +42,32 @@ function familyOf(fileName) {
   return base;
 }
 
-/** 参与认亲的资格：AI 来源 + 非「这是我写的」+ 非项目内 */
+// 文档类扩展名：AI 写的方案/报告/README 常常就放在项目文件夹里。
+// 一刀切把「项目内文件」全排除，等于让工具对"按项目整理文件的人"完全失效——
+// 而这类人恰恰是 AI 产出最多的人。所以项目内只放行文档，代码一律不碰。
+const DOC_EXTS = new Set(['.md', '.markdown', '.txt', '.rst', '.text']);
+
+function isProjectDoc(f) {
+  if (!f || !f.inProject) return false;
+  return DOC_EXTS.has(String(f.ext || '').toLowerCase());
+}
+
+// 归档类目录：用户主动留档的地方，里面的文件一律不当「可删旧版」。
+// 真实结构长这样：原位置留一张「已作废」便条，原文搬进 _归档/旧推广文案/。
+// 工具的天然倾向是「留最新的、删旧的」——结果删掉原文、留下一张指向空路径的便条。
+const ARCHIVE_SEG = /^[_\-.]?(归档|存档|备份|历史|旧|archive|archived|backup|bak|old|deprecated)([_\-.\d].*)?$/i;
+
+function isArchivePath(p) {
+  const parts = String(p || '').split(/[\\/]/).filter(Boolean);
+  parts.pop(); // 去掉文件名本身，只看目录
+  return parts.some((seg) => ARCHIVE_SEG.test(seg));
+}
+
+/** 参与认亲的资格：AI 来源 + 非「这是我写的」+ 项目内只放行文档 */
 function eligible(f) {
   if (!f || !f.source || f.source.id === 'unknown') return false;
-  if (f.mine || f.inProject) return false;
+  if (f.mine) return false;
+  if (f.inProject) return isProjectDoc(f);
   return true;
 }
 
@@ -55,6 +77,45 @@ function eligible(f) {
 // 把用户真正最新的那份列进删除清单。这类文件不参与 keeper 竞争，也不进删除候选，
 // 单独列为 suspect 交给上层（宁可不认，不可乱删）。
 const FUTURE_TOLERANCE_MS = 60 * 1000;
+
+// 时间戳「分不出来」的窗口：两秒以内认为先后不可辨。
+// 现实里三种场景会让同族文件的时间戳撞在一起或几乎撞在一起——
+// U 盘/移动硬盘拷贝（时间被统一改写）、网盘同步下载（同一时刻落盘）、解压压缩包。
+// 这时按名字排序会「留 v1 删 v3」，必须改用文件名里的版本记号判断谁更新。
+const SAME_TIME_MS = 2000;
+
+const NEWER_WORDS = /(final|最新版|最新|最终版|最终|定稿|ok|good|best)/i;
+const OLDER_WORDS = /(old|bak|备份|副本|拷贝|copy)/i;
+const DRAFT_WORD = /draft/i;
+
+/**
+ * 从文件名估一个「谁更新」的权重（越大越新）。只在时间戳分不出来时使用。
+ * 认得：v3 / ver3 / 版本3（含 v3.1）、尾部 1-2 位序号 (3) _3 空格3，
+ * 以及 final/最新/定稿 这类「更新」词与 old/备份/副本 这类「更旧」词。
+ * 8 位日期（20261101）不算版本号——那是另一代报告，不是同一族的第 N 版。
+ */
+function versionScore(name) {
+  const raw = String(name || '');
+  const base = path.basename(raw, path.extname(raw));
+  let score = 0;
+  // 日期尾优先认：20261101 这种，本身就能比大小，别落到下面按 1-2 位序号误判
+  const mDate = base.match(/[\s._-](20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/);
+  if (mDate) {
+    score = parseInt(mDate[1] + mDate[2] + mDate[3], 10);
+  } else {
+    const m = base.match(/(?:v|ver|版本)\.?(\d+)(?:\.(\d+))?/i);
+    if (m) {
+      score = parseInt(m[1], 10) * 100 + (m[2] ? parseInt(m[2], 10) : 0);
+    } else {
+      const m2 = base.match(/[\s._-]\(?(\d{1,2})\)?$/);
+      if (m2) score = parseInt(m2[1], 10) * 100;
+    }
+  }
+  if (NEWER_WORDS.test(base)) score += 100000000;
+  if (OLDER_WORDS.test(base)) score -= 100000000;
+  if (DRAFT_WORD.test(base)) score -= 50000000;
+  return score;
+}
 
 /** 取文件时间戳，并判断是否「不可信的未来时间」 */
 function stampOf(f, now) {
@@ -88,21 +149,43 @@ function findVersionChains(files) {
     const trusted = [];
     const suspects = [];
     const tBy = new Map();
+    const vBy = new Map();
     for (const f of members) {
       const st = stampOf(f, now);
       tBy.set(f, st.t);
+      vBy.set(f, versionScore(f.name));
       if (st.future) suspects.push(f);
       else trusted.push(f);
     }
     if (trusted.length < 2) continue; // 可信的不足两个：孤文件不成链，宁可不出卡
+    // 必须至少有一个成员「名字里带版本记号」才算版本链。
+    // 否则「A产品/README.md」和「B产品/README.md」会被当成同一文档的两个版本，
+    // 5 个项目就成 5 个版本——建议删掉 4 个项目的主文件，这是灾难级误判。
+    // 真实版本链一定有人带记号（v2/final/(1)/日期尾），纯同名只是"不同目录里的同名文件"。
+    const anyToken = trusted.some((f) => {
+      const base = path.basename(f.name, path.extname(f.name));
+      return familyOf(f.name).toLowerCase() !== base.toLowerCase();
+    });
+    if (!anyToken) continue;
     const sorted = trusted.sort((a, b) => {
       // 扫描器真实产出把 stat.mtimeMs 放在 mtime 字段；两种形状都要认，认反了会「留旧删新」
       const ta = tBy.get(a) || 0;
       const tb = tBy.get(b) || 0;
-      if (tb !== ta) return tb - ta; // 新在前
+      if (Math.abs(tb - ta) > SAME_TIME_MS) return tb - ta; // 时间能分辨先后，以时间准
+      // 时间撞在一起（拷贝/同步/解压）：改看文件名里的版本记号，别让 v1 因为字典序小就留下
+      const sa = vBy.get(a) || 0;
+      const sb = vBy.get(b) || 0;
+      if (sb !== sa) return sb - sa;
       return String(a.path).localeCompare(String(b.path));
     });
-    const [keeper, ...older] = sorted;
+    const [keeper, ...rest] = sorted;
+    // 归档/备份目录里的东西不算「可删旧版」——那是用户主动留的存档
+    const older = rest.filter((f) => !isArchivePath(f.path));
+    if (!older.length) continue; // 可删的一个都不剩，这张卡没意义
+    // 墓碑保护：keeper 比要删的最大的那份还短一半以上，多半是「已作废」便条，
+    // 不是真正的最新版。此时宁可不出卡，也不能建议删掉原文。
+    const maxOlderSize = older.reduce((m, f) => Math.max(m, Number(f.size) || 0), 0);
+    if (maxOlderSize > 0 && (Number(keeper.size) || 0) * 2 < maxOlderSize) continue;
     const sep = key.lastIndexOf('|');
     chains.push({
       family: key.slice(0, sep),
@@ -118,4 +201,4 @@ function findVersionChains(files) {
   return chains;
 }
 
-module.exports = { findVersionChains, familyOf, eligible };
+module.exports = { findVersionChains, familyOf, eligible, versionScore, isProjectDoc, DOC_EXTS };

@@ -5,7 +5,7 @@
   <p>
     <img alt="MIT" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-0.8.1-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-0.8.2-6366f1">
     <img alt="no cloud" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p>
@@ -42,7 +42,7 @@ Or run from source (bottom of this page).
 - **Stash box**: everything tucked away stays there with no expiry — review it, put files back anytime; emptying it is always your choice, never an auto-action
 - **Resident note**: a one-line weekly summary lives in the system tray, and the in-app note page shows four numbers for this month (tucked away / put back / space freed / tidied into archive). All computed from local logs — **zero telemetry**
 - **Archive** what you keep into one folder (always a move, never a copy — a tidying tool must not leave you with more files)
-- **Deduplicate**: SHA-256 full-file hashing for identical files, 3-gram similarity for near-identical ones; recommends which copy to keep
+- **Deduplicate**: SHA-256 full-file hashing for identical files, 3-gram similarity for near-identical ones; recommends which copy to keep. **Every row is tagged either "auto-cleaned" or "your call"** — identical copies that sit inside a project folder (say the same `package.json` in both the source tree and the release directory) are only listed, never touched; you decide
 - **Search inside files** when you remember what you wrote but not what you named it; matches are highlighted inline
 - **Auto watch** folders — new AI output is recognized and categorized within seconds (notify only, it never touches files)
 - **Bring your own AI (optional)**: one-click Ollama / LM Studio, or any OpenAI-compatible key — unlocks summaries, smart renames, side-by-side compare. Everything works without it

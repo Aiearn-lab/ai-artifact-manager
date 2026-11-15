@@ -1068,9 +1068,14 @@ function rowCells(f) {
 
   if (state.view === 'duplicates') {
     const sim = dup ? Math.round((f.duplicate.similarity || 1) * 100) : 100;
+    const exact = !!(f.duplicate && f.duplicate.kind === 'exact');
+    const auto = exact && autoCleanable(f);
+    const flag = auto
+      ? `<span class="dup-flag dup-flag-auto" title="${esc(t('dup.autoWhy'))}">${esc(t('dup.auto'))}</span>`
+      : `<span class="dup-flag dup-flag-manual" title="${esc(t('dup.manualWhy'))}">${esc(t('dup.manual'))}</span>`;
     return {
       name: nameCell,
-      c3: `<span class="cell-num">${f.duplicate && f.duplicate.kind === 'exact' ? t('dup.exact') : t('dup.similar', { p: sim })}</span>`,
+      c3: `<span class="cell-num">${exact ? esc(t('dup.exact')) : esc(t('dup.similar', { p: sim }))}</span>${flag}`,
       c4: `<span class="cell-text" title="${esc((f.duplicate && f.duplicate.withName) || '')}">${esc(
         (f.duplicate && f.duplicate.withName) || '—'
       )}</span>`
@@ -1085,6 +1090,19 @@ function rowCells(f) {
     }"></span><span class="source-name">${esc(sourceName(f))}</span></div>`,
     c4: `<span class="cat-badge cat-${esc(cat.key)}">${esc(catLabel(f))}</span>`
   };
+}
+
+/**
+ * 这份重复副本会不会被「一键瘦身」自动清掉。
+ * 口径与主进程 tiers.basicEligible 一致：确认是 AI 产出、且不在项目文件夹里、没标「我写的」。
+ * 不满足的仍然列在「重复文件」页，但只提示、不动手——让用户自己判断。
+ */
+function autoCleanable(f) {
+  if (!f || !f.duplicate || !f.duplicate.isDuplicate) return false;
+  if (f.duplicate.kind !== 'exact') return false;
+  if (!f.source || f.source.id === 'unknown') return false;
+  if (f.mine || f.inProject) return false;
+  return true;
 }
 
 function renderList() {
@@ -1127,6 +1145,20 @@ function renderList() {
   }
 
   listEl.querySelectorAll('.file-row, .list-tip').forEach((r) => r.remove());
+
+  // 重复文件页：先说清「哪些会被自动清、哪些要你自己判断」，别让人以为工具在装瞎
+  if (state.view === 'duplicates' && state.filtered.length) {
+    const nAuto = state.filtered.filter(autoCleanable).length;
+    const nManual = state.filtered.length - nAuto;
+    const note = document.createElement('div');
+    note.className = 'list-tip';
+    note.style.cssText =
+      'padding:10px 16px;font-size:12px;line-height:1.7;color:#667085;background:#f8fafc;border-bottom:1px solid #eef2f6;';
+    note.innerHTML =
+      esc(t('dup.tip')) +
+      `　<b style="color:#0f766e">${t('dup.auto')} ${nAuto}</b> / <b style="color:#98a2b3">${t('dup.manual')} ${nManual}</b>`;
+    listEl.appendChild(note);
+  }
   listEl.appendChild(frag);
 
   if (!state.filtered.length) {

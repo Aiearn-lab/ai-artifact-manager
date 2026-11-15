@@ -1,6 +1,6 @@
 'use strict';
 
-const { findVersionChains } = require('./versionchain');
+const { findVersionChains, isProjectDoc } = require('./versionchain');
 
 /**
  * 三档责任预案（2026-11-06 哥哥定案，小白模式的核心口径）：
@@ -18,9 +18,21 @@ const { findVersionChains } = require('./versionchain');
 
 const STASH_CATEGORY_KEYS = new Set(['junk', 'tool-onetime']); // 拿不准的默认只收这几类
 
-/** 基本资格：AI 来源 + 非负样本 + 非项目内（三档共用第一道门） */
+/** 基本资格（第一档·静默删专用）：AI 来源 + 非负样本 + **项目内一律不碰** */
 function basicEligible(f) {
   return !!f && !!f.source && f.source.id !== 'unknown' && !f.mine && !f.inProject;
+}
+
+/**
+ * 点头档（第二档）与只收档（第三档）的资格。
+ * 比 basicEligible 松一档：项目内的**文档**可以参与——AI 写的方案/报告就在项目里，
+ * 全排除等于让工具对开发者完全失效。但只到「用户点头」和「只搬走」为止，
+ * 静默删永远不含项目内文件（basicEligible 管着第一档）。
+ */
+function tierEligible(f) {
+  if (!f || !f.source || f.source.id === 'unknown' || f.mine) return false;
+  if (f.inProject) return isProjectDoc(f);
+  return true;
 }
 
 /** 第一档：逐字节相同的副本（inProject/mine 由 basicEligible 拦；正本 isKeeper 不在这里） */
@@ -53,7 +65,7 @@ function buildTierPlan(files) {
 
   // 第三档：剩下的里挑「垃圾/一次性」分类的收进回收箱；高置信也一样只收（无重复证据不静默删）
   const stash = all.filter(
-    (f) => basicEligible(f) && !takenIds.has(f.id) && f.category && STASH_CATEGORY_KEYS.has(f.category.key)
+    (f) => tierEligible(f) && !takenIds.has(f.id) && f.category && STASH_CATEGORY_KEYS.has(f.category.key)
   );
   for (const f of stash) takenIds.add(f.id);
 
@@ -77,4 +89,4 @@ function buildTierPlan(files) {
   };
 }
 
-module.exports = { buildTierPlan, basicEligible, isExactCopy };
+module.exports = { buildTierPlan, basicEligible, tierEligible, isExactCopy };
