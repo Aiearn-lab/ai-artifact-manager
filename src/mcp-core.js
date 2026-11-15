@@ -64,6 +64,8 @@ function describe(f) {
   return lines.join('\n');
 }
 
+// MCP Tool Annotations：四个提示全部显式声明为布尔值，且与各 handler 的实际行为一致。
+// 缺省时 MCP 主机会把工具当成「可写、破坏性、非幂等、开放世界」，OpenAI 目录会直接拒收。
 const TOOLS = [
   {
     name: 'search_files',
@@ -75,6 +77,12 @@ const TOOLS = [
         limit: { type: 'number', description: '最多返回条数，默认 20' }
       },
       required: ['query']
+    },
+    annotations: {
+      readOnlyHint: true,       // 只读索引，不改动任何文件
+      destructiveHint: false,
+      idempotentHint: true,     // 同样参数重复调用结果一致
+      openWorldHint: false      // 只访问本机索引，不联网
     }
   },
   {
@@ -86,6 +94,12 @@ const TOOLS = [
         path: { type: 'string', description: '文件的完整路径（必须在已扫描索引内）' }
       },
       required: ['path']
+    },
+    annotations: {
+      readOnlyHint: true,       // 只读取文件内容开头
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
     }
   },
   {
@@ -98,6 +112,12 @@ const TOOLS = [
         limit: { type: 'number', description: '最多返回条数，默认 50' }
       },
       required: ['category']
+    },
+    annotations: {
+      readOnlyHint: true,       // 只列举，不改动
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
     }
   },
   {
@@ -110,6 +130,12 @@ const TOOLS = [
         targetDir: { type: 'string', description: '归档目标根目录，不填则用软件里配置的默认归档目录' }
       },
       required: ['paths']
+    },
+    annotations: {
+      readOnlyHint: false,      // 会移动文件，改变磁盘状态
+      destructiveHint: true,    // 剪切操作，原位置不再保留
+      idempotentHint: false,    // 重复调用结果不同（文件已不在原位）
+      openWorldHint: false      // 只动本机文件，不联网
     }
   }
 ];
