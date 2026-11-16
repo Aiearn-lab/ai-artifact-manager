@@ -46,7 +46,9 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 ::-webkit-scrollbar-thumb:hover { background: #b6c0d2; background-clip: content-box; border: 2px solid transparent; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-.app { height: 100vh; display: flex; flex-direction: column; min-width: 0; }
+/* 用 100% 跟着窗口内容高度走：100vh 在高 DPI/系统缩放下会和真实可视区差几像素，
+   底部状态栏就容易被任务栏最后那一两像素压住 */
+.app { height: 100%; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
 /* ---------- 顶栏 ---------- */
 .topbar {
@@ -787,10 +789,26 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 .code-block .btn { position: absolute; right: 9px; top: 9px; background: rgba(255, 255, 255, .1); color: #dbe4f5; border-color: rgba(255, 255, 255, .16); }
 .code-block .btn:hover { background: rgba(255, 255, 255, .18); }
 
+/* 首次引导：一条明确的"第 1 步"，别让小白自己找 */
+.disk-first {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 15px; margin-bottom: 14px;
+  border: 1px solid #bfdbfe; border-radius: 12px;
+  background: linear-gradient(100deg, #eff6ff, #f8fbff);
+}
+.disk-first .df-num {
+  flex: none; padding: 4px 10px; border-radius: 999px;
+  background: #2563eb; color: #fff; font-size: 11.5px; font-weight: 750; white-space: nowrap;
+}
+.disk-first .df-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.disk-first .df-text b { font-size: 13px; color: #1e3a8a; }
+.disk-first .df-text span { font-size: 11.5px; color: #3b5b9a; line-height: 1.5; }
+.disk-first .btn { flex: none; }
+
 /* 让 AI 接手：空间体检页的显眼入口 */
 .disk-ai-banner {
   display: flex; align-items: center; gap: 12px;
-  padding: 12px 14px; margin-bottom: 14px;
+  padding: 12px 14px; margin-top: 20px;
   border: 1px solid #c7d2fe; border-radius: 12px;
   background: linear-gradient(100deg, #eef2ff, #f5f3ff);
 }
@@ -1092,59 +1110,6 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 .settings-brandbar a { color: var(--primary); }
 .settings-brandbar .sb-note { margin-left: auto; color: #a8b1c1; }
 
-/* ---------- 自动监控 ---------- */
-.watch-dirs { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
-.watch-dirs:empty { display: none; }
-.watch-dir {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #475569;
-  background: var(--panel-soft);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 5px 9px;
-}
-.watch-dir span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.watch-dir button {
-  border: none;
-  background: none;
-  color: #a8b1c1;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 2px;
-}
-.watch-dir button:hover { color: var(--danger); }
-
-.watch-bar {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 0 10px;
-  padding: 8px 12px;
-  border: 1px solid #cfe8d8;
-  background: #f3fbf6;
-  border-radius: 10px;
-  font-size: 12.5px;
-  color: #2f6b4b;
-}
-.watch-bar.hidden { display: none; }
-.watch-bar .wb-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #16a34a;
-  flex: 0 0 auto;
-  animation: wb-pulse 2s ease-in-out infinite;
-}
-@keyframes wb-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: .45; transform: scale(.85); }
-}
-.watch-bar .wb-text { flex: 1; }
-
 /* ---------- v0.9 空间体检 ---------- */
 /* 空间体检页会把「扫描整个电脑 / 一键瘦身」两个按钮收起来，齿轮要自己站到最右边 */
 .topbar #btnSettings { margin-left: auto; }
@@ -1173,8 +1138,30 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 }
 .disk-head h2 { margin: 0 0 3px; font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
 .disk-head p { margin: 0; font-size: 12.5px; color: var(--muted); }
-.disk-head-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+/* 体检按钮区：紧贴磁盘卡片下方、居中放大，视线看完卡片就落在这里 */
+.disk-cta { display: flex; flex-direction: column; align-items: center; gap: 9px; margin: 18px 0 8px; }
+.disk-cta .btn-xl { padding: 15px 46px; font-size: 16.5px; font-weight: 750; border-radius: 13px; box-shadow: 0 6px 18px rgba(37, 99, 235, .22); }
+.disk-cta.is-done .btn-xl { box-shadow: none; padding: 10px 26px; font-size: 14px; }
 .disk-pick-hint { font-size: 12.5px; color: var(--muted); }
+
+/* 盘卡片上的"占用最高"小标签：独占一行，不去挤标题和剩余空间 */
+.drive-tag {
+  display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 999px;
+  background: #fef3c7; color: #92400e; font-size: 10.5px; font-weight: 650;
+}
+
+/* 三档说明折叠：默认收成一行，想看再点开 */
+.disk-why { margin-top: 14px; }
+.disk-why > summary {
+  cursor: pointer; font-size: 12.5px; color: var(--muted);
+  padding: 7px 0; list-style: none; user-select: none;
+}
+.disk-why > summary::-webkit-details-marker { display: none; }
+.disk-why > summary::before { content: '▸ '; }
+.disk-why[open] > summary::before { content: '▾ '; }
+.disk-why > summary:hover { color: var(--primary); }
+.disk-why-body { padding: 4px 0 8px; }
+.disk-why-body > p { margin: 0 0 8px; font-size: 12.5px; color: var(--text-soft); line-height: 1.7; }
 
 .disk-drives {
   flex: 0 0 auto;
@@ -1204,7 +1191,7 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 .disk-drive-bar.hot span { background: linear-gradient(90deg, #fbbf24, #ef4444); }
 .disk-drive-sub { font-size: 11.5px; color: var(--text-soft); }
 
-.disk-idle { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.disk-idle { padding: 2px 20px 20px; }
 .disk-idle-inner { max-width: 620px; }
 .disk-idle-inner h3 { margin: 0 0 8px; font-size: 15px; }
 .disk-idle-inner p { margin: 0 0 10px; font-size: 13px; color: var(--text-soft); }
@@ -1218,7 +1205,15 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 .disk-total .dt-big { font-size: 22px; font-weight: 750; color: var(--text); letter-spacing: -0.4px; }
 .disk-total .dt-chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel-soft); border: 1px solid var(--border); color: var(--muted); }
 
-.disk-bar { display: flex; height: 22px; border-radius: 7px; overflow: hidden; background: #eef2f7; }
+/* 体检结果的一句话人话总结：先给结论再看数字 */
+.disk-plain {
+  margin-top: 12px; padding: 12px 15px; border-radius: 10px;
+  background: #f0fdf6; border: 1px solid #a7f3d0;
+  color: #065f46; font-size: 13px; line-height: 1.75;
+}
+.disk-plain b { color: #047857; font-weight: 750; }
+
+.disk-bar { display: flex; height: 22px; border-radius: 7px; overflow: hidden; background: #eef2f7; margin-top: 10px; }
 .disk-bar > span { display: block; height: 100%; transition: width .3s ease; }
 .disk-bar .seg-safe { background: linear-gradient(180deg, #34d399, #10b981); }
 .disk-bar .seg-careful { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
@@ -1303,6 +1298,8 @@ code { font-family: var(--mono); font-size: 12px; background: #eef1f7; padding: 
 /* 「清掉这一档」弹窗 */
 .disk-group-head .dg-clean { flex: 0 0 auto; margin-left: 4px; }
 .disk-clean-note { display: flex; flex-direction: column; gap: 8px; padding: 2px 0 10px; }
+/* 清理量大时的提示：先说清要等、能停，避免用户以为卡死 */
+.dcn-big { display: inline-block; margin-top: 7px; color: #92400e; font-size: 12px; }
 .dcn-item {
   border: 1px solid var(--border);
   background: var(--panel-soft);
