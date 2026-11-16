@@ -30,7 +30,8 @@ window.I18N = {
     'ov.firstHint': '先选一个位置，点「扫描整个电脑」或「一键扫常用位置」',
 
     /* 视图切换 */
-    'view.files': '文件清单',
+    'view.disk': '空间体检',
+    'view.files': 'AI 文件',
     'view.knowledge': '知识库',
     'view.tools': '工具库',
     'view.duplicates': '重复文件',
@@ -185,6 +186,7 @@ window.I18N = {
     'prog.deduping': '正在找重复内容…',
     'prog.working': '处理中…',
     'prog.scanned': '已扫描 {n} 个文件…',
+    'prog.diskScan': '正在数文件体积…（已数 {n} 个）',
     'prog.stopping': '正在停止…',
     'prog.scanFailed': '扫描失败',
     'disk.reading': '正在读取磁盘…',
@@ -283,7 +285,8 @@ window.I18N = {
     'ov.notScanned': 'Not scanned yet',
     'ov.firstHint': 'Pick a location and hit "Scan whole computer" or "Scan common folders"',
 
-    'view.files': 'Files',
+    'view.disk': 'Disk Checkup',
+    'view.files': 'AI Files',
     'view.knowledge': 'Knowledge',
     'view.tools': 'Scripts',
     'view.duplicates': 'Duplicates',
@@ -427,6 +430,7 @@ window.I18N = {
     'prog.deduping': 'Finding duplicates…',
     'prog.working': 'Working…',
     'prog.scanned': 'Scanned {n} files…',
+    'prog.diskScan': 'Measuring sizes… ({n} files)',
     'prog.stopping': 'Stopping…',
     'prog.scanFailed': 'Scan failed',
     'disk.reading': 'Reading drives…',
