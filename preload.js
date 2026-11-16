@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('api', {
   tidyRun: (payload) => ipcRenderer.invoke('tidy:run', payload),
   tierPlan: () => ipcRenderer.invoke('tier:plan'),
   tierRun: (payload) => ipcRenderer.invoke('tier:run', payload),
+
+  // v0.9 磁盘体检：只统计不删，告诉用户空间去哪了
+  diskScan: (payload) => ipcRenderer.invoke('disk:scan', payload),
+  diskCancel: () => ipcRenderer.invoke('disk:cancel'),
+  diskLast: () => ipcRenderer.invoke('disk:last'),
+  diskReveal: (dirPath) => ipcRenderer.invoke('disk:reveal', dirPath),
+  diskExport: (payload) => ipcRenderer.invoke('disk:export', payload),
   stashList: () => ipcRenderer.invoke('stash:list'),
   stashRestore: (payload) => ipcRenderer.invoke('stash:restore', payload),
   stashEmpty: () => ipcRenderer.invoke('stash:empty'),
