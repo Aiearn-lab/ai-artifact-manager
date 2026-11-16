@@ -4,7 +4,7 @@
   <p>
     <img alt="license" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-0.9.1-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-0.9.2-6366f1">
     <img alt="local" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p><a href="README.md">中文</a> · <b>English</b></p>
