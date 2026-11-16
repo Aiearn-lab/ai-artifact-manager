@@ -1,4 +1,4 @@
-# AI产出管家 (ai-artifact-manager)
+# AI产出管家 (ai-artifact-manager) v1.0.0
 
 > 本机磁盘体检与 AI 文件管理工具。离线、免费、数据不出本机；删除进 Windows 回收站，可还原。
 
