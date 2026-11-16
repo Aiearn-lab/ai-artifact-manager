@@ -4,7 +4,7 @@
   <p>
     <img alt="license" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-0.9.2-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-1.0.0-6366f1">
     <img alt="local" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p><a href="README.md">中文</a> · <b>English</b></p>
@@ -18,22 +18,22 @@ Manages the files AI tools pile up on your computer. Offline, free, nothing leav
 
 ## Download
 
-[Latest release (Windows 64-bit)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest) — portable, unzip and double-click. No installer or account. If Windows shows "protected your PC" on first launch, click More info → Run anyway.
+[Latest release (Windows 64-bit)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest) — portable, unzip and double-click. No installer or account. First launch puts a desktop shortcut (once only, never overwrites an existing one). If Windows shows "protected your PC", click More info → Run anyway.
 
 ## Three steps
 
-1. You land on **Disk checkup**. Click "Check this drive"; seconds later you see three tiers — **safe to clear / big blocks / hands off** — whose numbers add up exactly to the drive's real usage. "Open" jumps to the folder
+1. You land on **Clean disk**. Pick a drive, click "Start checkup"; seconds later you see three tiers — **safe to clear / big items / hands off** — whose numbers add up exactly to the drive's real usage. "Open" jumps to the folder
 2. **AI files** recognizes and categorizes AI output; **Slim down** handles work by confidence tier
 3. The **Stash box** lets you put anything back; the **Monthly note** shows what happened this month
 
-![Disk checkup](docs/screenshots/disk.png)
+![Clean disk](docs/screenshots/disk.png)
 
 ## Features
 
-- **Disk checkup** — measures sizes only, touches nothing, shows the biggest items and where they live, including what the recycle bin is holding
-- **One-click cleanup** — clears only the "safe to clear" tier (caches, dependencies, build output); project dependencies are skipped, deletions go to the Recycle Bin, and you see the list before anything happens
+- **Clean disk** — measures sizes only, touches nothing, shows the biggest items and where they live, including what the recycle bin is holding
+- **One-click cleanup** — clears only the "safe to clear" tier (caches, bytecode, build output); deletions go to the Recycle Bin and you see the list first. App-bundled dependencies and virtual environments are never auto-cleared — deleting them breaks the app, so it errs on the safe side
 - **Peek inside** — walk into a large directory one level at a time to find out what the 177 GB actually is
-- **Duplicates** — SHA-256 for identical files, similarity for near-identical ones; every row is tagged "auto-cleaned" or "your call", and copies inside projects are only listed
+- **Duplicate files** — byte-for-byte comparison for identical files, similarity for near-identical ones; every row is tagged "auto-cleaned" or "your call", and copies inside projects are only listed
 - **Organize & search** — archiving moves, never copies; full-text search; optional local model or your own API key for summaries and renaming
 
 ## Safety
