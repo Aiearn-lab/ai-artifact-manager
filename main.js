@@ -22,6 +22,8 @@ const tiers = require('./src/tiers');
 const digest = require('./src/digest');
 const { AdviceCache, judgeBatch, cacheKey } = require('./src/ai-advice');
 const { createMcpHttpServer } = require('./src/mcp-http');
+const diskScan = require('./src/disk-scan');
+const diskClassify = require('./src/disk-classify');
 const { safeFileName } = require('./src/safe-path');
 const { sourceLabel } = require('./src/source-label');
 
@@ -1232,6 +1234,101 @@ function registerIpc() {
   });
 
   /** 三档预案：一档静默删的副本 / 二档按组点头的版本卡 / 三档只收不删的回收箱候选 */
+  /* ============ v0.9 磁盘体检：先回答「空间去哪了」，再谈删不删 ============ */
+  let diskAbort = false;
+  let lastDisk = null;
+
+  /** 各盘容量：只读 statfs，不动任何文件 */
+  async function diskUsageList() {
+    const out = [];
+    for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
+      const root = `${letter}:\\`;
+      try {
+        const st = await fsp.statfs(root);
+        const total = st.blocks * st.bsize;
+        if (!total) continue;
+        const free = st.bfree * st.bsize;
+        out.push({ letter, root, total, free, used: total - free });
+      } catch {
+        /* 没这个盘，跳过 */
+      }
+    }
+    return out;
+  }
+
+  ipcMain.handle('disk:scan', async (e, payload) => {
+    const p = payload || {};
+    const root = String(p.root || '').trim();
+    if (!root) throw new Error('先选一个盘或文件夹');
+    diskAbort = false;
+    sendProgress('diskScan', 0, 0);
+    const tree = await diskScan.measure(root, {
+      maxDepth: Number(p.maxDepth) || 6,
+      keepTree: true,
+      onProgress: (n) => sendProgress('diskScan', n, 0),
+      shouldStop: () => diskAbort
+    });
+    const grades = diskClassify.collectGrades(tree, { maxDepth: 6 });
+    let recycleBin = null;
+    if (p.withRecycle !== false) {
+      try {
+        recycleBin = await diskScan.measureRecycleBin(root);
+      } catch {
+        recycleBin = null;
+      }
+    }
+    const disks = await diskUsageList();
+    lastDisk = {
+      root,
+      at: Date.now(),
+      durationMs: tree.durationMs,
+      stopped: !!tree.stopped,
+      totalSize: tree.size,
+      totalFiles: tree.files,
+      grades,
+      recycleBin,
+      disks
+    };
+    sendProgress('diskScan', tree.files, tree.files);
+    return lastDisk;
+  });
+
+  ipcMain.handle('disk:cancel', () => {
+    diskAbort = true;
+    return { cancelled: true };
+  });
+
+  ipcMain.handle('disk:last', () => lastDisk);
+
+  // 体检结果里点一行直接看目录内容。只放行本次体检根目录底下的路径，
+  // 界面被绕过也打不开别的地方。
+  ipcMain.handle('disk:reveal', async (e, dirPath) => {
+    const p = String(dirPath || '').trim();
+    if (!p) throw new Error('没有指定目录');
+    if (!lastDisk || !lastDisk.root) throw new Error('先做一次体检');
+    const root = path.resolve(lastDisk.root);
+    const target = path.resolve(p);
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    if (target !== root && !target.startsWith(prefix)) throw new Error('只能打开本次体检范围内的目录');
+    const err = await shell.openPath(target);
+    if (err) throw new Error(err);
+    return true;
+  });
+
+  // 把体检结果存成一份人能看的 Markdown（用户自己留档、或转给别人看）
+  ipcMain.handle('disk:export', async (e, payload) => {
+    const text = String((payload && payload.text) || '');
+    if (!text) throw new Error('没有可保存的内容');
+    const r = await dialog.showSaveDialog(mainWindow, {
+      title: '保存体检结果',
+      defaultPath: `磁盘体检_${new Date().toISOString().slice(0, 10)}.md`,
+      filters: [{ name: 'Markdown', extensions: ['md'] }, { name: '文本', extensions: ['txt'] }]
+    });
+    if (r.canceled || !r.filePath) return { saved: false };
+    await fsp.writeFile(r.filePath, text, 'utf8');
+    return { saved: true, path: r.filePath };
+  });
+
   ipcMain.handle('tier:plan', async () => {
     if (!lastScan) throw new Error('还没有扫描结果');
     const plan = tiers.buildTierPlan(lastScan.files);
