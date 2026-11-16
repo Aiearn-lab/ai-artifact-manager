@@ -62,21 +62,28 @@ function fmtBytes(n) {
   return `${(v / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-/** 托盘一句话（≤60 字，装得下 tooltip） */
+/**
+ * 托盘一句话（≤60 字，装得下 tooltip）。
+ *
+ * 只说"上次扫描看到了什么"，不说"正在盯着"——托盘不是实时监控，
+ * 数字来自最近一次扫描，用户没扫过就是空的。说"在盯着"是假话，会让人以为工具在工作其实没有。
+ */
 function trayLine(week, o) {
   const zh = !o || o.zh !== false;
   const w = week || { newAiFiles: 0, removable: 0 };
   if (!w.newAiFiles) {
-    return zh ? '管家在盯着：这周还没见到新的 AI 产出。' : 'Watching: no new AI output this week.';
+    return zh
+      ? 'AI产出管家 · 点我打开（想看清硬盘，点开做次体检）'
+      : 'AI Artifact Manager · click to open (run a checkup to see disk usage)';
   }
   if (w.removable) {
     return zh
-      ? `这周 AI 又生成了 ${w.newAiFiles} 个文件，${w.removable} 个可以让管家收走——点开看看？`
-      : `${w.newAiFiles} new AI files this week, ${w.removable} can be stashed — take a look?`;
+      ? `上次扫描：这周 AI 产出 ${w.newAiFiles} 个文件，${w.removable} 个可以收走——点开看看？`
+      : `Last scan: ${w.newAiFiles} new AI files this week, ${w.removable} can be stashed — open?`;
   }
   return zh
-    ? `这周 AI 生成了 ${w.newAiFiles} 个文件，暂时没什么可收的。`
-    : `${w.newAiFiles} new AI files this week — nothing to stash.`;
+    ? `上次扫描：这周 AI 产出 ${w.newAiFiles} 个文件，暂时没什么可收的。`
+    : `Last scan: ${w.newAiFiles} new AI files this week — nothing to stash.`;
 }
 
 /** 月报页那行汇总话术 */
