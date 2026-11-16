@@ -200,6 +200,6 @@ function collectGrades(root, options) {
 }
 
 // 三档的对外叫法（要和界面文案一致）
-const GRADE_LABEL = { safe: '能安全清掉', careful: '占地大户', keep: '不用管' };
+const GRADE_LABEL = { safe: '能安全清掉', careful: '占地方的大件', keep: '不用管' };
 
 module.exports = { gradeDir, summarize, collectGrades, GRADE_LABEL, SAFE_DIR_NAMES, ARCHIVE_HINT };
