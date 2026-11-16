@@ -23,8 +23,8 @@ Manages the files AI tools pile up on your computer. Offline, free, nothing leav
 ## Three steps
 
 1. You land on **Clean disk**. Pick a drive, click "Start checkup"; seconds later you see three tiers — **safe to clear / big items / hands off** — whose numbers add up exactly to the drive's real usage. "Open" jumps to the folder
-2. **AI files** recognizes and categorizes AI output; **Slim down** handles work by confidence tier
-3. The **Stash box** lets you put anything back; the **Monthly note** shows what happened this month
+2. Click **Scan whole computer** in the top bar — AI output gets recognized and sorted into categories; **Slim down** handles it by confidence tier, always showing the list before acting
+3. Three more entries sit at the top right of the **AI Files** page: **Recycle box** (restore what was stashed), **Monthly note** (what happened this month), **Cleanup log** (what was cleared)
 
 ![Clean disk](docs/screenshots/disk.png)
 
