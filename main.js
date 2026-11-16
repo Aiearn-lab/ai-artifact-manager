@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, safeStorage, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, safeStorage, Tray, nativeImage, screen } = require('electron');
 const path = require('path');
 const fsSync = require('fs');
 const fsp = fsSync.promises;
@@ -27,6 +27,7 @@ const diskClassify = require('./src/disk-classify');
 const diskClean = require('./src/disk-clean');
 const { safeFileName } = require('./src/safe-path');
 const { sourceLabel } = require('./src/source-label');
+const { ensureDesktopShortcut } = require('./src/desktop-shortcut');
 
 const APP_NAME = 'AI产出管家';
 const VERSION = require('./package.json').version;
@@ -44,7 +45,7 @@ let autoScanDir = null;
 let scanAbort = false;
 let tray = null; // v0.8 M3：托盘常驻周报，e2e 下不建
 let quitting = false; // 只有托盘菜单/真正退出动作才置真，关窗口≠退出
-// 回归/截图判定：argv 走 _test/ 的（e2e、run_watch…）和自设 AI_AM_E2E 的（截图脚本）都不许偷偷自动全盘扫
+// 回归/截图判定：argv 走 _test/ 的（e2e、shot…）和自设 AI_AM_E2E 的（截图脚本）都不许偷偷自动全盘扫
 const isE2E =
   (process.argv[1] && String(process.argv[1]).includes('_test')) || process.env.AI_AM_E2E === '1';
 
@@ -80,6 +81,15 @@ function decryptSecret(stored) {
 function aiConfigPlain() {
   const ai = configStore.get().ai;
   return { ...ai, apiKey: decryptSecret(ai.apiKey) };
+}
+
+// E2E 截图专用：允许把 userData 指到临时空目录，模拟"第一次安装"的用户
+if (process.env.AI_AM_USERDATA) {
+  try {
+    app.setPath('userData', process.env.AI_AM_USERDATA);
+  } catch {
+    /* ignore */
+  }
 }
 
 // portable 版：配置放在 exe 同目录，跟着 U 盘/文件夹走（目录不可写时回退默认）
@@ -434,119 +444,6 @@ function makeSnippet(text, needle) {
   return `${start > 0 ? '…' : ''}${piece}${end < text.length ? '…' : ''}`;
 }
 
-/* ---------------- 自动监控：盯着几个文件夹，出现新文件就分好类告诉用户 ---------------- */
-// 只发现、只分类、只提示，绝不自己动文件——要不要归档永远由用户决定
-const watchState = {
-  enabled: false,
-  dirs: [],
-  watchers: [],
-  debounce: new Map(),
-  known: new Map(), // path -> `mtime:size`
-  recent: [],
-  priming: false
-};
-
-function watchKey(f) {
-  return `${f.mtime}:${f.size}`;
-}
-
-async function watchScanOnce(dir) {
-  if (!dir) return { added: 0 };
-  const cfg = configStore.safe();
-  let r;
-  try {
-    r = await scanner.scan(dir, {
-      whitelist: cfg.whitelist,
-      maxDepth: cfg.maxDepth || 14,
-      maxFiles: 20000
-    });
-  } catch {
-    return { added: 0 };
-  }
-
-  const fresh = [];
-  for (const f of r.files) {
-    const k = watchKey(f);
-    const prev = watchState.known.get(f.path);
-    watchState.known.set(f.path, k);
-    if (prev === undefined) fresh.push(f); // 第一次见到才算新文件
-  }
-  if (!fresh.length || watchState.priming) return { added: 0 };
-
-  classifier.classifyAll(fresh);
-  if (overridesStore) overridesStore.apply(fresh);
-  const items = fresh.map((f) => ({
-    path: f.path,
-    name: f.name,
-    size: f.size,
-    source: sourceLabel(f.source),
-    category: (f.category && f.category.label) || '其他',
-    retention: (f.category && f.category.retention) || ''
-  }));
-
-  const entry = { at: Date.now(), dir, count: items.length, items: items.slice(0, 30) };
-  watchState.recent.unshift(entry);
-  watchState.recent = watchState.recent.slice(0, 30);
-
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('watch:found', entry);
-  }
-  return { added: items.length, entry };
-}
-
-async function startWatch(dirs) {
-  stopWatch();
-  const list = Array.from(new Set((dirs || []).filter((d) => typeof d === 'string' && d.trim())));
-  if (!list.length) return { ok: false, error: '先选一个要盯的文件夹' };
-
-  for (const dir of list) {
-    try {
-      const w = fsSync.watch(dir, { recursive: true }, () => {
-        const prev = watchState.debounce.get(dir);
-        if (prev) clearTimeout(prev);
-        watchState.debounce.set(
-          dir,
-          setTimeout(() => {
-            watchState.debounce.delete(dir);
-            watchScanOnce(dir);
-          }, 2500)
-        );
-      });
-      watchState.watchers.push(w);
-    } catch (err) {
-      stopWatch();
-      return { ok: false, error: `盯不住「${dir}」：${err.message}` };
-    }
-  }
-
-  watchState.enabled = true;
-  watchState.dirs = list;
-
-  // 先静默扫一遍把现有文件记为已知，免得一开监控就报几百个"新文件"
-  watchState.priming = true;
-  for (const dir of list) await watchScanOnce(dir);
-  watchState.priming = false;
-
-  await configStore.patch({ watch: { enabled: true, dirs: list } });
-  return { ok: true, dirs: list };
-}
-
-function stopWatch() {
-  for (const w of watchState.watchers) {
-    try {
-      w.close();
-    } catch {
-      /* 关不掉也不影响 */
-    }
-  }
-  for (const t of watchState.debounce.values()) clearTimeout(t);
-  watchState.watchers = [];
-  watchState.debounce.clear();
-  watchState.enabled = false;
-  watchState.dirs = [];
-  watchState.known.clear();
-}
-
 async function writeIndex() {
   if (!lastScan) return;
   const indexPath = path.join(app.getPath('userData'), 'mcp-index.json');
@@ -894,30 +791,6 @@ function registerIpc() {
 
     await Promise.all(Array.from({ length: Math.min(SEARCH_CONCURRENCY, files.length) }, worker));
     return { ok: true, hits, scanned: files.length, elapsed: Date.now() - started, partial };
-  });
-
-  // ---------- 自动监控 ----------
-  ipcMain.handle('watch:start', async (e, dirs) => startWatch(dirs));
-  ipcMain.handle('watch:stop', async () => {
-    stopWatch();
-    await configStore.patch({ watch: { enabled: false, dirs: [] } });
-    return { ok: true };
-  });
-  ipcMain.handle('watch:status', () => ({
-    enabled: watchState.enabled,
-    dirs: watchState.dirs,
-    recent: watchState.recent
-  }));
-  ipcMain.handle('watch:scanNow', async (e, dir) => {
-    const target = dir || watchState.dirs[0];
-    if (!target) return { ok: false, error: '还没设置要盯的文件夹' };
-    const r = await watchScanOnce(target);
-    return { ok: true, added: r.added || 0 };
-  });
-  ipcMain.handle('watch:pickDir', async () => {
-    const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
-    if (r.canceled || !r.filePaths.length) return { ok: false };
-    return { ok: true, dir: r.filePaths[0] };
   });
 
   ipcMain.handle('file:preview', async (e, filePath) => {
@@ -1369,8 +1242,13 @@ function registerIpc() {
         result.skipped.push({ path: abs, name: rec.name, size: rec.size || 0, reason: verdict.reason });
         continue;
       }
+      // 单条 12 秒超时：真机上某个日志目录/浏览器缓存偶尔会让回收站操作挂起，
+      // 没有超时的话一条卡住就把整批清理拖死（实测挂过 15 分钟）。超时就跳过这一条，继续下一条。
       try {
-        await shell.trashItem(abs);
+        await Promise.race([
+          shell.trashItem(abs),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('这条处理超时，已跳过')), 12000))
+        ]);
         result.done.push({ path: abs, name: rec.name, size: rec.size || 0 });
         result.freed += rec.size || 0;
       } catch (err) {
@@ -1804,11 +1682,30 @@ function registerIpc() {
 }
 
 function createWindow() {
+  // 窗口尺寸必须按「屏幕可用区」算，不能写死：
+  // 1920×1080 开到 150% 缩放时，逻辑工作区只有 1231×662 —— 写死 1320×860 会超出任务栏，
+  // 底部状态栏被压在任务栏下面（真机实测过）。这里统一按 workArea 收一遍。
+  let win = { width: 1320, height: 860, minWidth: 1040, minHeight: 680 };
+  try {
+    const wa = screen.getPrimaryDisplay().workArea;
+    const margin = 40;
+    win = {
+      width: Math.min(1320, Math.max(900, wa.width - margin)),
+      height: Math.min(860, Math.max(560, wa.height - margin)),
+      minWidth: Math.min(1040, Math.max(760, wa.width - margin * 2)),
+      // 最小高度绝不能大于可用高度，否则系统会硬撑窗口、底部内容被裁
+      minHeight: Math.min(680, Math.max(480, wa.height - margin * 2))
+    };
+  } catch {
+    /* 拿不到屏幕信息就用兜底值 */
+  }
+
   mainWindow = new BrowserWindow({
-    width: 1320,
-    height: 860,
-    minWidth: 1040,
-    minHeight: 680,
+    width: win.width,
+    height: win.height,
+    minWidth: win.minWidth,
+    minHeight: win.minHeight,
+    center: true,
     title: APP_NAME,
     backgroundColor: '#f4f6fb',
     show: false,
@@ -1972,6 +1869,23 @@ async function init() {
     }
   }
 
+  // 首次启动在桌面放一个指向本程序的快捷方式。
+  // 只在打包版、非测试模式执行：开发时 npm start 指向 electron.exe，建了也没意义；
+  // 回归测试更不能往哥哥真实桌面写东西。失败一律安静跳过，绝不阻断启动。
+  if (app.isPackaged && !isE2E) {
+    try {
+      const r = await ensureDesktopShortcut({
+        targetExe: appExePath(),
+        desktopDir: app.getPath('desktop'),
+        userDataDir: app.getPath('userData'),
+        shell
+      });
+      console.log('[shortcut] ' + (r.reason || (r.ok ? '快捷方式就绪' : '跳过')));
+    } catch (err) {
+      console.warn('[shortcut] 跳过（不影响启动）：', (err && err.message) || err);
+    }
+  }
+
   registerIpc();
   createWindow();
   createTray();
@@ -1982,18 +1896,6 @@ async function init() {
     } catch {
       /* 端口被占用时不阻断启动，用户可在界面里重开 */
     }
-  }
-
-  // 上次开着自动监控的，启动时接着盯（先等窗口就绪，免得事件发不出去）
-  const wcfg = configStore.get().watch;
-  if (wcfg && wcfg.enabled && Array.isArray(wcfg.dirs) && wcfg.dirs.length) {
-    mainWindow.webContents.once('did-finish-load', () => {
-      setTimeout(() => {
-        startWatch(wcfg.dirs).catch(() => {
-          /* 目录没了就安静放弃，不打扰用户 */
-        });
-      }, 1200);
-    });
   }
 
   autoScanDir = process.env.AI_AM_AUTOSCAN || parseScanArg(process.argv);
