@@ -59,13 +59,10 @@ const DEFAULTS = {
   // 其余进待确认桶只能手动勾。关掉=回到旧行为，仅供调试，不建议。
   tidy: {
     aiOnly: true
-  },
-  // 自动监控：盯住这几个文件夹，出现新文件就分类提示（不会自己动文件）
-  watch: {
-    enabled: false,
-    dirs: []
   }
   // v0.8：pro.activated/pro.code 僵尸键已删（全仓无任何消费方）；ui.lang 保留兼容旧配置文件
+  // 自动监控（watch）已整体下线：托盘那句"在盯着"是假话、默认关着还要用户选目录，价值不大。
+  // 老 config.json 里若还有 watch 键，按未知键静默保留，不影响运行。
 };
 
 function isPlainObject(v) {
@@ -127,8 +124,7 @@ const SCHEMA = {
   ai: { provider: asStr, baseUrl: asHttpUrl, apiKey: asStr, model: asStr },
   mcp: { enabled: asBool, token: asStr },
   ui: { theme: asTheme, onboarded: asBool, autoFullScan: asBool, lang: asStr },
-  tidy: { aiOnly: asBool },
-  watch: { enabled: asBool, dirs: asStrList }
+  tidy: { aiOnly: asBool }
 };
 
 /**
