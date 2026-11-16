@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { isRebuildableName, isSystemTop } = require('./disk-scan');
+const { isRebuildableName, isSystemTop, isUnderSystemPath, isInsideProgramData } = require('./disk-scan');
 
 /**
  * 磁盘体检·可回收分级。
@@ -15,14 +15,15 @@ const { isRebuildableName, isSystemTop } = require('./disk-scan');
  * 署名：智维工作室 / Zhiwei Studio
  */
 
-// 目录名就是"能重新生成"的：装得回来、编得回来
+// 目录名就是"能重新生成"的：装得回来、编得回来。
+// 和 disk-scan 的可重建名单保持一致——node_modules / venv / site-packages 已移除：
+// 真机上它们大多是程序自带的那份（抖音、DeepSeek、Node 安装目录），删了程序就断。
 const SAFE_DIR_NAMES = new Set([
-  'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache',
-  '.venv', 'venv', 'env', '.tox',
+  '__pycache__', '.pytest_cache', '.mypy_cache', '.tox',
   'dist', 'build', 'out', 'output', 'target', 'release', 'debug',
   '.next', '.nuxt', '.svelte-kit', '.parcel-cache', '.turbo', '.vite',
   '.cache', 'cache', 'caches', 'temp', 'tmp', 'logs',
-  '.gradle', '.m2', '.nuget', 'site-packages', 'obj',
+  '.gradle', '.m2', '.nuget', 'obj',
   '.idea', '.vscode', '.vs'
 ]);
 
@@ -49,8 +50,10 @@ function gradeDir(node) {
   const full = norm(node.path);
   const sizeGB = (Number(node.size) || 0) / 1024 ** 3;
 
-  // 1) 系统目录与游戏/软件安装目录：一律别碰
-  if (isSystemTop(name) || KEEP_HINT.test(name) || KEEP_HINT.test(full)) {
+  // 1) 系统目录与游戏/软件安装目录：一律别碰。
+  //    看整条路径而不只是末级名——C:\Windows\System32\winevt\Logs 末级叫 Logs，
+  //    单看名字会被当成日志缓存判成可清，其实它是系统事件日志。
+  if (isSystemTop(name) || isUnderSystemPath(node.path) || isInsideProgramData(node.path) || KEEP_HINT.test(name) || KEEP_HINT.test(full)) {
     return { grade: 'keep', why: '系统或软件安装目录，不该由清理工具动', explicit: true };
   }
 
