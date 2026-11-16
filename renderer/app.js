@@ -33,6 +33,7 @@ const LANG_MAP = {
 
 const state = {
   config: null,
+  isE2E: false,
   scan: null,
   files: [],
   filtered: [],
@@ -49,9 +50,7 @@ const state = {
   contentHits: new Map(),
   contentSearching: false,
   contentScanned: 0,
-  contentPartial: false,
-  // 自动监控状态
-  watch: { enabled: false, dirs: [], recent: [] }
+  contentPartial: false
 };
 
 /* ---------------- 多语言 ---------------- */
@@ -187,6 +186,7 @@ async function init() {
   let info = {};
   try {
     info = await window.api.appInfo();
+    state.isE2E = info.e2e === true;
     $('#statusVersion').textContent = `v${info.version}`;
     $('#aboutVersion').textContent = `v${info.version}`;
   } catch {
@@ -196,17 +196,8 @@ async function init() {
   try {
     const last = await window.api.lastScan();
     if (last && last.files && last.files.length) applyScan(last);
-    // v0.8 M3 开箱即用：装机第一次打开就自动把整台电脑扫一遍（只盘点不动手），
-    // 上次被叫停的半截账也不算数；回归测试里关掉，免得把固定样本之外的盘也扫进来。
-    if (
-      (!last || !(last.files || []).length || (last.summary && last.summary.cancelled)) &&
-      info.e2e !== true &&
-      (!state.config || !state.config.ui || state.config.ui.autoFullScan !== false)
-    ) {
-      const disks = await window.api.listDisks();
-      const roots = (disks || []).map((d) => d.root).filter(Boolean);
-      if (roots.length) scanRoots(roots, t('label.allDisks'));
-    }
+    // 不再在启动时偷偷全盘扫：首次打开停在空间体检页，只做一件事。
+    // 需要"AI 文件"清单时，用户点进那一页再扫（见 setView），避免眼前一页、后台另一页的错位感。
   } catch {
     /* ignore */
   }
@@ -241,15 +232,6 @@ async function init() {
   window.api.onAutoScan((dir) => {
     if (!dir) return;
     scanRoots([dir], t('label.picked'));
-  });
-
-  // 监控状态与「发现新文件」推送
-  await loadWatchStatus();
-  window.api.onWatchFound(async (entry) => {
-    await loadWatchStatus();
-    if (entry && entry.count) {
-      toast(t('msg.watchFound', { n: entry.count }));
-    }
   });
 
   // 初始化完成，启动画面淡出（.out 有 320ms 过渡，之后再移除节点）
@@ -322,6 +304,16 @@ function bindEvents() {
     renderDiskDrives();
   });
 
+  // 首次引导条：点「知道了」就记住，不再出现
+  $('#btnDiskFirstOk').addEventListener('click', async () => {
+    $('#diskFirst').classList.add('hidden');
+    try {
+      state.config = await window.api.configPatch({ ui: { onboarded: true } });
+    } catch {
+      /* 存不下不影响用 */
+    }
+  });
+
   $('#diskGroups').addEventListener('click', async (e) => {
     const cleanAll = e.target.closest('[data-clean-all]');
     if (cleanAll) {
@@ -386,7 +378,18 @@ function bindEvents() {
     runDiskClean();
   });
   $('#btnCloseDiskClean').addEventListener('click', closeDiskClean);
-  $('#btnCloseDiskClean2').addEventListener('click', closeDiskClean);
+  // 清理进行中这一个按钮变成「停下来」：先让主进程停下，再关弹窗
+  $('#btnCloseDiskClean2').addEventListener('click', async () => {
+    if (diskClean.running) {
+      try {
+        await window.api.diskCleanCancel();
+      } catch {
+        /* 停不下来就让它在后台收尾 */
+      }
+      return;
+    }
+    closeDiskClean();
+  });
   $('#diskCleanModal').addEventListener('click', (e) => {
     if (e.target === $('#diskCleanModal')) closeDiskClean();
   });
@@ -425,27 +428,6 @@ function bindEvents() {
     scheduleContentSearch(state.filter.q);
   });
   // v0.8：界面语言选择器已移除（英文入口下线），setLang 仅留给内部截图工具调用
-  $('#btnWatchAdd').addEventListener('click', addWatchDir);
-  $('#btnWatchToggle').addEventListener('click', toggleWatch);
-  $('#watchDirs').addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-i]');
-    if (!btn) return;
-    state.watch.dirs.splice(Number(btn.dataset.i), 1);
-    refreshWatchUI();
-    if (state.watch.enabled && state.watch.dirs.length) {
-      await window.api.watchStart(state.watch.dirs);
-    } else if (state.watch.enabled && !state.watch.dirs.length) {
-      await window.api.watchStop();
-    }
-    await loadWatchStatus();
-  });
-  $('#btnWatchShow').addEventListener('click', () => {
-    const last = (state.watch.recent || [])[0];
-    if (!last) return;
-    // 新文件就在刚才盯的目录里，点一下直接扫它
-    scanRoots([last.dir], t('label.fromWatch'));
-  });
-
   $('#btnOnboardOk').addEventListener('click', async () => {
     $('#onboardTip').classList.add('hidden');
     try {
@@ -949,6 +931,17 @@ function renderMiniChart() {
 
 function setView(view) {
   state.view = view;
+  // 第一次点进「AI 文件」页时，如果还没有任何盘点结果，就在这里扫一次——
+  // 用户是主动点进来的，看到进度条不会懵；不再在启动时后台偷跑。
+  if (view === 'files' && !(state.files && state.files.length) && !state.scanning) {
+    const cfg = state.config || {};
+    if (state.isE2E !== true && (!cfg.ui || cfg.ui.autoFullScan !== false)) {
+      window.api.listDisks().then((disks) => {
+        const roots = (disks || []).map((d) => d.root).filter(Boolean);
+        if (roots.length) scanRoots(roots, t('label.allDisks'));
+      }).catch(() => {});
+    }
+  }
   $$('.nav-tab').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $('#categoryTabs').classList.toggle('hidden', view !== 'files');
   if (view !== 'files') {
@@ -1372,94 +1365,6 @@ function currentFile() {
 function renderPreviewEmpty() {
   $('#previewEmpty').classList.remove('hidden');
   $('#previewContent').classList.add('hidden');
-}
-
-/* ---------------- 自动监控 ---------------- */
-function renderWatchDirs() {
-  const box = $('#watchDirs');
-  if (!box) return;
-  const dirs = (state.watch && state.watch.dirs) || [];
-  box.innerHTML = dirs
-    .map(
-      (d, i) =>
-        `<div class="watch-dir"><span title="${esc(d)}">${esc(d)}</span><button type="button" data-i="${i}" title="不再盯这个">×</button></div>`
-    )
-    .join('');
-}
-
-function refreshWatchUI() {
-  const w = state.watch || { enabled: false, dirs: [] };
-  const txt = $('#watchStatusText');
-  const btn = $('#btnWatchToggle');
-  if (txt) {
-    txt.textContent = w.enabled
-      ? LANG === 'zh'
-        ? `正在盯 ${w.dirs.length} 个文件夹`
-        : `Watching ${w.dirs.length} folder(s)`
-      : LANG === 'zh'
-      ? '未开启'
-      : 'Off';
-    txt.style.color = w.enabled ? '#059669' : '';
-  }
-  if (btn) btn.textContent = w.enabled ? (LANG === 'zh' ? '停止监控' : 'Stop') : LANG === 'zh' ? '开启监控' : 'Start';
-  renderWatchDirs();
-
-  const bar = $('#watchBar');
-  if (bar) {
-    if (w.enabled) {
-      const total = (w.recent || []).reduce((n, r) => n + (r.count || 0), 0);
-      $('#watchBarText').textContent = total
-        ? `自动监控中 · 已经发现 ${total} 个新文件，都分好类了`
-        : `自动监控中 · 盯着 ${w.dirs.length} 个文件夹，有新文件会提醒你`;
-      bar.classList.remove('hidden');
-    } else {
-      bar.classList.add('hidden');
-    }
-  }
-  const show = $('#btnWatchShow');
-  if (show && w.recent && w.recent.length) show.classList.remove('hidden');
-  else if (show) show.classList.add('hidden');
-}
-
-async function loadWatchStatus() {
-  try {
-    const r = await window.api.watchStatus();
-    state.watch = { enabled: !!r.enabled, dirs: r.dirs || [], recent: r.recent || [] };
-  } catch {
-    state.watch = { enabled: false, dirs: [], recent: [] };
-  }
-  refreshWatchUI();
-}
-
-async function toggleWatch() {
-  const w = state.watch || {};
-  try {
-    if (w.enabled) {
-      await window.api.watchStop();
-      toast(t('msg.watchStopped'));
-    } else {
-      if (!w.dirs || !w.dirs.length) return toast(t('msg.watchPickFirst'), true);
-      const r = await window.api.watchStart(w.dirs);
-      if (!r || !r.ok) return toast(t('msg.watchStartFail'), true);
-      toast(t('msg.watchStarted', { n: r.dirs.length }));
-    }
-    await loadWatchStatus();
-  } catch (err) {
-    toast(t('msg.opFail', { msg: err.message }), true);
-  }
-}
-
-async function addWatchDir() {
-  const r = await window.api.watchPickDir();
-  if (!r || !r.ok) return;
-  if (state.watch.dirs.includes(r.dir)) return toast(t('msg.watchDup'));
-  state.watch.dirs.push(r.dir);
-  refreshWatchUI();
-  if (state.watch.enabled) {
-    const s2 = await window.api.watchStart(state.watch.dirs);
-    if (!s2 || !s2.ok) return toast(t('msg.watchUpdateFail'), true);
-  }
-  await loadWatchStatus();
 }
 
 async function selectFile(id) {
@@ -2786,6 +2691,7 @@ function renderBars(container, items) {
 const diskState = {
   drives: [],
   picked: null,
+  hottestRoot: null, // 占用率最高的那块盘，界面上标"建议先看"
   result: null,
   busy: false,
   cancelling: false,
@@ -2796,13 +2702,13 @@ const GRADE_META = {
   safe: {
     label: '能安全清掉',
     color: '#10b981',
-    head: '装得回来的东西',
-    note: '缓存、依赖包、编译产物。删掉之后要用的时候重新装一次、重新编一次就回来了，不影响你任何成果。这一档我们敢给你数字。'
+    head: '删了没关系的',
+    note: '缓存、字节码、编译产物。删了要么自动重建、要么无感，不影响你任何成果。依赖包和虚拟环境不在这里——那是程序的零件，删了程序就跑不起来。这一档我们敢给你数字。'
   },
   careful: {
-    label: '占地大户',
+    label: '占地方的大件',
     color: '#f59e0b',
-    head: '占了地方，但你说了算',
+    head: '不是垃圾，你自己看',
     note: '这几块块头最大。我们没把握替你判断能不能删——可能是你留的游戏、聊天记录里的文件、下载的素材。点「打开」看一眼里面是什么，你比我们清楚。我们不给这一档任何清理建议。'
   },
   keep: {
@@ -2820,12 +2726,13 @@ async function loadDiskDrives() {
   } catch {
     diskState.drives = [];
   }
-  // 默认选中占用率最高的那块盘（用户最可能是这块满了）
-  if (!diskState.picked && diskState.drives.length) {
+  // 默认选中占用率最高的那块盘（用户最可能是这块满了），并把它是"占用最高"记下来给界面标注
+  if (diskState.drives.length) {
     const hottest = diskState.drives
       .slice()
       .sort((a, b) => (b.total - b.free) / b.total - (a.total - a.free) / a.total)[0];
-    diskState.picked = (hottest || diskState.drives[0]).root;
+    diskState.hottestRoot = (hottest || diskState.drives[0]).root;
+    if (!diskState.picked) diskState.picked = diskState.hottestRoot;
   }
   renderDiskDrives();
 }
@@ -2845,13 +2752,17 @@ function renderDiskDrives() {
       const pct = d.total ? (used / d.total) * 100 : 0;
       const hot = pct >= 85 ? ' hot' : '';
       const on = diskState.picked === d.root ? ' on' : '';
+      // 标出"占用最高、建议先看这块"：默认选中它是代码算的，用户看不见这个逻辑，
+      // 不标出来他会莫名其妙"为什么一打开就选了 D 盘"。
+      const isHottest = diskState.hottestRoot === d.root;
+      const tag = isHottest ? '<span class="drive-tag">占用最高，建议先看</span>' : '';
       return `<button class="disk-drive${on}" type="button" data-root="${esc(d.root)}">
         <div class="disk-drive-top">
           <span class="disk-drive-name">${esc(d.letter)}: 盘</span>
           <span class="disk-drive-free">剩 ${fmtSize(d.free)}</span>
         </div>
         <div class="disk-drive-bar${hot}"><span style="width:${pct.toFixed(1)}%"></span></div>
-        <div class="disk-drive-sub">已用 ${fmtSize(used)} · 共 ${fmtSize(d.total)}</div>
+        <div class="disk-drive-sub">已用 ${fmtSize(used)} · 共 ${fmtSize(d.total)}${tag}</div>
       </button>`;
     })
     .join('');
@@ -2859,10 +2770,20 @@ function renderDiskDrives() {
   const btn = $('#btnDiskScan');
   if (btn) {
     btn.disabled = !diskState.picked || diskState.cancelling;
-    btn.textContent = diskState.busy ? (diskState.cancelling ? '正在停下…' : '停下来') : '体检这块盘';
+    const has = !!(diskState.result && diskState.result.grades);
+    btn.textContent = diskState.busy
+      ? (diskState.cancelling ? '正在停下…' : '停下来')
+      : has
+      ? '重新体检'
+      : '开始体检';
   }
   const hint = $('#diskPickHint');
-  if (hint) hint.textContent = diskState.picked ? `已选 ${String(diskState.picked).replace(/\\$/, '')} 盘` : '下面点一块盘';
+  if (hint) {
+    const letter = diskState.picked ? String(diskState.picked).replace(/\\$/, '') : '';
+    hint.textContent = diskState.picked
+      ? `已选 ${letter} 盘${diskState.hottestRoot === diskState.picked ? '（占用最高）' : ''}`
+      : '先点上面一块盘';
+  }
 }
 
 /** 体检一块盘。只统计体积，一个文件都不动 */
@@ -2872,7 +2793,7 @@ async function runDiskScan() {
   diskState.busy = true;
   diskState.cancelling = false;
   renderDiskDrives();
-  $('#statusText').textContent = `正在数 ${root} 里的文件…（文件多的时候要等十几秒，可以随时点「停下来」）`;
+  $('#statusText').textContent = `正在数 ${root} 里的文件…文件多的盘可能要一两分钟，不是在卡——随时可以点「停下来」。这期间一个文件都不会动。`;
   $('#progressBar').classList.remove('hidden');
   $('#progressFill').style.width = '12%';
   try {
@@ -2904,6 +2825,15 @@ function renderDiskView() {
   const has = !!(diskState.result && diskState.result.grades);
   idle.classList.toggle('hidden', has);
   result.classList.toggle('hidden', !has);
+  // 出结果后按钮换成「重新体检」：用户想换一块盘，点上面的盘卡片再点这里就行，不会没路走
+  const cta = $('#diskCta');
+  if (cta) cta.classList.toggle('is-done', has);
+  // 首次引导：只在"还没体检过 + 没点过知道了"时显示；一旦体检出结果就自动收起
+  const first = $('#diskFirst');
+  if (first) {
+    const seen = !!(state.config && state.config.ui && state.config.ui.onboarded);
+    first.classList.toggle('hidden', seen || has);
+  }
   if (has) renderDiskResult();
 }
 
@@ -2926,6 +2856,33 @@ function renderDiskResult() {
       ${secs ? `<span class="dt-chip">数完花了 ${secs} 秒</span>` : ''}`;
   }
 
+  // 一句话人话总结：小白不看六个数字，只看这一句就知道"所以呢"。
+  // 话术按" safe 能不能清"分两种，并把占地方的大件说成"你的东西，不是垃圾"。
+  const plainEl = $('#diskPlain');
+  if (plainEl) {
+    // 关键：这里的数字必须和「清掉这一档」按钮一致——项目依赖会被跳过，
+    // 不算进"能放心清"。之前直接拿 g.safe.size 导致总结说 1.8GB、按钮说 390MB，自相矛盾。
+    const safeItems = (g.safe.items || []).filter((it) => it && it.size > 0);
+    const cleanable = safeItems.filter((it) => !it.inProject);
+    const safeSize = cleanable.reduce((n, it) => n + (it.size || 0), 0);
+    const safeCnt = cleanable.length;
+    const projCnt = safeItems.length - cleanable.length;
+    const carefulGB = g.careful.size / 1073741824;
+    let line;
+    if (!safeCnt) {
+      line = `这块盘没找到能放心清的东西。<b>剩下的都是你的文件或程序，管家不乱动。</b>`;
+    } else {
+      line =
+        `能放心清掉的只有 <b>${fmtSize(safeSize)}</b>（${safeCnt} 处）——清了能腾出这些空间，而且是进回收站、能反悔的。` +
+        (projCnt > 0 ? `另有 ${projCnt} 处是项目正在用的依赖，<b>管家不会清</b>。` : '') +
+        (carefulGB >= 1
+          ? `另外那 <b>${fmtSize(g.careful.size)}</b> 是占地方的大件，多半是你的游戏、资料或下载，<b>不是垃圾，得你自己看一眼</b>。`
+          : '');
+    }
+    plainEl.innerHTML = line;
+    plainEl.classList.remove('hidden');
+  }
+
   // 第二行：一条按体积分段的色条
   const barEl = $('#diskBar');
   if (barEl) {
@@ -2937,21 +2894,26 @@ function renderDiskResult() {
   }
 
   // 第三行：图例（每一档多少、多少处）。中间档必须写清「不是都能删」，
-  // 否则一个 235GB 的数字摆在「占地大户」后面，小白会以为能清出 235GB。
+  // 否则一个 235GB 的数字摆在「占地方的大件」后面，小白会以为能清出 235GB。
   const legendEl = $('#diskLegend');
   if (legendEl) {
+    const safeItems = (g.safe.items || []).filter((it) => it && it.size > 0);
+    const projCnt = safeItems.filter((it) => it.inProject).length;
     const extra = {
-      safe: '',
+      // 「能安全清掉」里若有项目依赖，明确标出来，否则体积和实际能清的按钮对不上
+      safe: projCnt ? `<span class="dl-warn">其中 ${projCnt} 处是项目依赖，不会清</span>` : '',
       careful: '<span class="dl-warn">不是都能删，得你自己看一眼</span>',
       keep: ''
     };
     legendEl.innerHTML = grades
-      .map(
-        (k) =>
-          `<span class="disk-legend-item"><span class="disk-legend-dot ${k}"></span>${GRADE_META[k].label} <b>${fmtSize(
-            g[k].size
-          )}</b> <span class="dl-count">${g[k].count} 处</span>${extra[k]}</span>`
-      )
+      .map((k) => {
+        // 处数用"真正列得出来的条目"（size>0）算，和绿字总结、清理按钮同一口径，
+        // 否则会出现"图例说 546 处、按钮说清 5 处"这种自相矛盾。
+        const cnt = k === 'safe' ? safeItems.length : g[k].count;
+        return `<span class="disk-legend-item"><span class="disk-legend-dot ${k}"></span>${GRADE_META[k].label} <b>${fmtSize(
+          g[k].size
+        )}</b> <span class="dl-count">${cnt} 处</span>${extra[k]}</span>`;
+      })
       .join('') + '<span class="disk-legend-item dl-sum">三档相加＝整块盘，不重不漏</span>';
   }
 
@@ -2992,6 +2954,8 @@ function renderDiskGroups(res) {
       const meta = GRADE_META[k];
       const open = diskState.open[k] ? ' open' : '';
       const items = (bucket.items || []).filter((it) => it.size > 0);
+      // 空档直接不显示：0 处还占一整行，小白看了只会困惑"为什么给我看空的"
+      if (!items.length) return '';
       const showAll = diskState.open['all-' + k];
       const shown = showAll ? items : items.slice(0, 12);
       const allPaths = items.map((it) => String(it.path));
@@ -3030,7 +2994,7 @@ function renderDiskGroups(res) {
             )}　<button class="btn btn-ghost btn-sm" type="button" data-showall="${k}">全部展开</button></div>`
           : '';
       // 只有「能安全清掉」这一档给清理按钮；另外两档连按钮都不出现，
-      // 免得用户以为"占地大户"也能一键清。
+      // 免得用户以为"占地方的大件"也能一键清。
       // 按钮上的数字只算真能清的（项目依赖要扣掉），免得点了才发现少了几处。
       const cleanable = k === 'safe' ? items.filter((it) => !it.inProject) : [];
       const cleanSize = cleanable.reduce((n, it) => n + (it.size || 0), 0);
@@ -3138,18 +3102,34 @@ function openDiskClean(paths) {
 
   const total = list.reduce((n, it) => n + (it.size || 0), 0);
   const root = String(res.root || '');
-  $('#diskCleanTitle').textContent = want ? '清掉这一个（还没动任何文件）' : '清掉这一档（还没动任何文件）';
-  $('#diskCleanNote').innerHTML = `即将清掉 <b>${list.length}</b> 处，共 <b>${fmtSize(
-    total
-  )}</b>。这些是缓存、依赖包、编译产物——删了以后要用的时候重新装一次、重新编一次就回来了。`;
+  $('#diskCleanTitle').textContent = want ? '清掉这一个（还没删）' : '清掉这些能腾空间（还没删）';
+  // 说人话：先给"能腾多少"，再一句安抚。不堆"依赖包/编译产物"这类黑话。
+  // 量大时先说清"要等、能停"——否则用户点完以为卡死（真机上清 20GB 临时目录要几分钟）。
+  const bigBatch = total > 2 * 1024 * 1024 * 1024;
+  $('#diskCleanNote').innerHTML =
+    `清掉后能腾出 <b>${fmtSize(total)}</b> 空间。这些是软件用临时留下的东西，不是你的文件和资料。` +
+    (bigBatch
+      ? `<br><span class="dcn-big">这一批量比较大，要花几分钟——中途可以点「停下来」，已经清掉的不会白清。</span>`
+      : '');
 
   const rows = list
     .slice(0, 12)
     .map((it) => {
       const full = String(it.path);
       const rel = full.startsWith(root) ? full.slice(root.length).replace(/^\\+/, '') : full;
+      // 人话名字：从路径里挑出"哪个软件留下的"，小白看这一行就够了；
+      // 完整路径留到 title 悬浮里，想核对的人还能看。
+      const segs = full.split(/[\\/]/).filter(Boolean);
+      let who = '';
+      for (const s of segs) {
+        if (/^(users|administrator|appdata|local|roaming|programdata|windows|user data)$/i.test(s)) continue;
+        if (/^(cache|caches|logs|log|temp|tmp|\.cache)$/i.test(s)) continue;
+        if (/\.(exe|dll|pak)$/i.test(s)) continue;
+        if (s && !s.includes(':')) { who = s; break; }
+      }
+      const name = who || (it.name || segs[segs.length - 2] || '临时文件');
       return `<div class="disk-row">
-        <div class="dr-path"><div class="dr-name">${esc(rel)}</div><div class="dr-full" title="${esc(full)}">${esc(full)}</div></div>
+        <div class="dr-path"><div class="dr-name">${esc(name)} 留下的临时文件</div><div class="dr-full" title="${esc(full)}">${esc(rel)}</div></div>
         <div class="dr-why">${esc(it.why || '')}</div>
         <div class="dr-size">${fmtSize(it.size)}</div>
       </div>`;
@@ -3172,7 +3152,7 @@ function openDiskClean(paths) {
 
   const runBtn = $('#btnDiskCleanRun');
   runBtn.dataset.mode = '';
-  runBtn.textContent = `确认清掉这 ${list.length} 处`;
+  runBtn.textContent = `确认清掉，腾出 ${fmtSize(total)}`;
   runBtn.classList.remove('hidden');
   runBtn.disabled = false;
   $('#diskCleanHint').textContent = '没点「确认清掉」之前，一个文件夹都不会动。';
@@ -3189,9 +3169,15 @@ async function runDiskClean() {
   if (diskClean.running || !diskClean.paths) return;
   diskClean.running = true;
   const runBtn = $('#btnDiskCleanRun');
+  const stopBtn = $('#btnCloseDiskClean2');
   runBtn.disabled = true;
   runBtn.textContent = '正在清…';
-  $('#diskCleanHint').textContent = '正在往回收站搬，文件夹大的时候要等一会儿。别关窗口。';
+  // 清理中把「关闭」变成「停下来」：原来 running 时关闭按钮点了没反应，用户只能干等
+  if (stopBtn) {
+    stopBtn.textContent = '停下来';
+    stopBtn.disabled = false;
+  }
+  $('#diskCleanHint').textContent = '正在往回收站搬，文件夹大的时候要等一会儿。中途可以点「停下来」。';
   $('#statusText').textContent = '正在清理…';
   try {
     const r = await window.api.diskClean({ paths: diskClean.paths });
@@ -3215,6 +3201,10 @@ async function runDiskClean() {
   } finally {
     diskClean.running = false;
     $('#statusText').textContent = '就绪';
+    if (stopBtn) {
+      stopBtn.textContent = '关闭';
+      stopBtn.disabled = false;
+    }
   }
 }
 
