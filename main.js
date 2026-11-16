@@ -24,6 +24,7 @@ const { AdviceCache, judgeBatch, cacheKey } = require('./src/ai-advice');
 const { createMcpHttpServer } = require('./src/mcp-http');
 const diskScan = require('./src/disk-scan');
 const diskClassify = require('./src/disk-classify');
+const diskClean = require('./src/disk-clean');
 const { safeFileName } = require('./src/safe-path');
 const { sourceLabel } = require('./src/source-label');
 
@@ -37,6 +38,7 @@ let adviceCache = null;
 let stashStore = null; // 回收箱（三档责任·第三档），init 里建
 let adviseAbort = false;
 let mcpServer = null;
+let diskRuntime = null; // 磁盘体检能力桥：IPC 与 MCP 共用同一套主进程守门逻辑
 let lastScan = null;
 let autoScanDir = null;
 let scanAbort = false;
@@ -601,7 +603,8 @@ async function ensureMcp() {
     mcpServer = createMcpHttpServer({
       indexPath: path.join(app.getPath('userData'), 'mcp-index.json'),
       getDefaultArchiveRoot: () => configStore.get().archiveRoot,
-      token
+      token,
+      disk: diskRuntime
     });
   }
   return mcpServer.start(3927);
@@ -1236,6 +1239,7 @@ function registerIpc() {
   /** 三档预案：一档静默删的副本 / 二档按组点头的版本卡 / 三档只收不删的回收箱候选 */
   /* ============ v0.9 磁盘体检：先回答「空间去哪了」，再谈删不删 ============ */
   let diskAbort = false;
+  let diskCleanAbort = false;
   let lastDisk = null;
 
   /** 各盘容量：只读 statfs，不动任何文件 */
@@ -1256,7 +1260,11 @@ function registerIpc() {
     return out;
   }
 
-  ipcMain.handle('disk:scan', async (e, payload) => {
+  /**
+   * 体检主流程。IPC 和 MCP 共用同一个函数——AI 走的和界面走的是同一套扫描、分级、
+   * 项目依赖标注逻辑，不存在「AI 那条路少查一步」的情况。
+   */
+  async function doDiskScan(payload) {
     const p = payload || {};
     const root = String(p.root || '').trim();
     if (!root) throw new Error('先选一个盘或文件夹');
@@ -1269,6 +1277,16 @@ function registerIpc() {
       shouldStop: () => diskAbort
     });
     const grades = diskClassify.collectGrades(tree, { maxDepth: 6 });
+    // 体检阶段就先认出「项目依赖」：它们名字看着能重建，但清掉项目就跑不起来。
+    // 早标早说清楚，别等用户点了「清掉这一档」才告诉他有两处要跳过。
+    const memo = new Map();
+    for (const it of grades.safe.items) {
+      try {
+        it.inProject = await diskClean.findProjectMarker(it.path, memo);
+      } catch {
+        it.inProject = null;
+      }
+    }
     let recycleBin = null;
     if (p.withRecycle !== false) {
       try {
@@ -1291,7 +1309,9 @@ function registerIpc() {
     };
     sendProgress('diskScan', tree.files, tree.files);
     return lastDisk;
-  });
+  }
+
+  ipcMain.handle('disk:scan', async (e, payload) => doDiskScan(payload));
 
   ipcMain.handle('disk:cancel', () => {
     diskAbort = true;
@@ -1299,6 +1319,161 @@ function registerIpc() {
   });
 
   ipcMain.handle('disk:last', () => lastDisk);
+
+  /**
+   * 清掉「能安全清掉」那一档。
+   *
+   * 界面只传路径，其余一律回查主进程自己的体检结果：
+   * 体积、档位、条目是否真的存在，都以 lastDisk 为准，界面被绕过也清不到别的东西。
+   * 每一条在动手前再走一遍 disk-clean.inspect（系统目录/项目依赖/已变更一律拒），
+   * 删除走 shell.trashItem，和用户自己右键删除完全一样，回收站里能还原。
+   */
+  async function doDiskClean(payload) {
+    const p = payload || {};
+    if (!lastDisk || !lastDisk.grades || !lastDisk.grades.safe) throw new Error('先做一次体检，才有可清的清单');
+    if (recycleBinDisabled()) {
+      throw new Error('这台电脑被设置成「删除时不进回收站」，删掉就真找不回来了。为了安全，管家不做这个操作。');
+    }
+
+    const root = lastDisk.root;
+    // 白名单：只有本次体检认下来的 safe 条目才可能被清
+    const allow = new Map();
+    for (const it of lastDisk.grades.safe.items) {
+      if (it && it.path) allow.set(path.resolve(it.path), it);
+    }
+    const asked =
+      Array.isArray(p.paths) && p.paths.length
+        ? p.paths
+        : Array.from(allow.values())
+            .filter((it) => !it.inProject)
+            .map((it) => it.path);
+    const queue = asked.slice(0, 2000);
+
+    diskCleanAbort = false;
+    const result = { done: [], skipped: [], failed: [], freed: 0, stopped: false, total: queue.length };
+    sendProgress('diskClean', 0, queue.length);
+
+    for (let i = 0; i < queue.length; i += 1) {
+      if (diskCleanAbort) {
+        result.stopped = true;
+        break;
+      }
+      const abs = path.resolve(String(queue[i] || ''));
+      const rec = allow.get(abs);
+      if (!rec) {
+        result.skipped.push({ path: abs, reason: '不在本次体检的可清列表里' });
+        continue;
+      }
+      const verdict = await diskClean.inspect(abs, root);
+      if (!verdict.ok) {
+        result.skipped.push({ path: abs, name: rec.name, size: rec.size || 0, reason: verdict.reason });
+        continue;
+      }
+      try {
+        await shell.trashItem(abs);
+        result.done.push({ path: abs, name: rec.name, size: rec.size || 0 });
+        result.freed += rec.size || 0;
+      } catch (err) {
+        result.failed.push({ path: abs, name: rec.name, size: rec.size || 0, error: err.code || err.message });
+      }
+      sendProgress('diskClean', i + 1, queue.length);
+    }
+
+    // 真删成功才记账，小报里"腾出"那个数字靠它
+    if (result.done.length) {
+      await appendTrashLog(result.done);
+      await appendDigestEvent({ kind: 'trashed', count: result.done.length });
+      // 体检结果里即时扣掉，界面不用重扫就能看到数字变小
+      const gone = new Set(result.done.map((d) => path.resolve(d.path)));
+      const kept = lastDisk.grades.safe.items.filter((it) => !gone.has(path.resolve(it.path)));
+      const removedSize = lastDisk.grades.safe.size - kept.reduce((n, it) => n + (it.size || 0), 0);
+      lastDisk.grades.safe.items = kept;
+      lastDisk.grades.safe.count = kept.length;
+      lastDisk.grades.safe.size = Math.max(0, lastDisk.grades.safe.size - removedSize);
+      lastDisk.totalSize = Math.max(0, (lastDisk.totalSize || 0) - result.freed);
+      lastDisk.cleanedAt = Date.now();
+    }
+    sendProgress('diskClean', queue.length, queue.length);
+    return result;
+  }
+
+  ipcMain.handle('disk:clean', async (e, payload) => doDiskClean(payload));
+
+  ipcMain.handle('disk:cleanCancel', () => {
+    diskCleanAbort = true;
+    return { cancelled: true };
+  });
+
+  /**
+   * 「看看里面」：只列这一层，找出最占地方的几个文件 + 有哪些子文件夹。
+   * 体检只到第 6 层，再往下就得靠这个——用户看到"177GB"想知道是什么，
+   * 点一下就能看到"里面是 3 个 .pak，每个 60GB"，不用去资源管理器里翻。
+   *
+   * 刻意不递归算子文件夹体积：那等于把 177GB 再走一遍，点一下就等半分钟。
+   * 想看子文件夹里有什么，点进去就行（一层一层走），几十毫秒一层。
+   */
+  async function doDiskPeek(dirPath) {
+    const p = String(dirPath || '').trim();
+    if (!p) throw new Error('没有指定目录');
+    if (!lastDisk || !lastDisk.root) throw new Error('先做一次体检');
+    const root = path.resolve(lastDisk.root);
+    const target = path.resolve(p);
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    if (target !== root && !target.startsWith(prefix)) throw new Error('只能看本次体检范围内的目录');
+
+    let entries;
+    try {
+      entries = await fsp.readdir(target, { withFileTypes: true });
+    } catch (err) {
+      throw new Error(`打不开这个目录：${err.code || err.message}`);
+    }
+
+    const filesOut = [];
+    const dirsOut = [];
+    let fileBytes = 0;
+    let skipped = 0;
+    for (const ent of entries) {
+      const full = path.join(target, ent.name);
+      if (ent.isDirectory()) {
+        dirsOut.push({ name: ent.name, path: full });
+        continue;
+      }
+      if (!ent.isFile()) {
+        skipped += 1;
+        continue;
+      }
+      let st;
+      try {
+        st = await fsp.lstat(full);
+      } catch {
+        skipped += 1;
+        continue;
+      }
+      filesOut.push({
+        name: ent.name,
+        path: full,
+        size: st.size,
+        ext: path.extname(ent.name).toLowerCase(),
+        mtime: st.mtimeMs
+      });
+      fileBytes += st.size;
+    }
+    filesOut.sort((a, b) => b.size - a.size);
+    dirsOut.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+
+    return {
+      path: target,
+      parent: path.dirname(target) === target ? null : path.dirname(target),
+      fileCount: filesOut.length,
+      dirCount: dirsOut.length,
+      fileBytes,
+      skipped,
+      files: filesOut.slice(0, 10),
+      dirs: dirsOut.slice(0, 40)
+    };
+  }
+
+  ipcMain.handle('disk:peek', async (e, dirPath) => doDiskPeek(dirPath));
 
   // 体检结果里点一行直接看目录内容。只放行本次体检根目录底下的路径，
   // 界面被绕过也打不开别的地方。
@@ -1328,6 +1503,30 @@ function registerIpc() {
     await fsp.writeFile(r.filePath, text, 'utf8');
     return { saved: true, path: r.filePath };
   });
+
+  // 供 MCP 复用：AI 和界面共用同一套函数，安全边界只在主进程写一次。
+  // 即使 AI 被诱导绕过界面，也拿不到超出这份桥接的能力。
+  diskRuntime = {
+    status: () => {
+      if (!lastDisk) return null;
+      return {
+        root: lastDisk.root,
+        at: lastDisk.at,
+        totalSize: lastDisk.totalSize,
+        totalFiles: lastDisk.totalFiles,
+        durationMs: lastDisk.durationMs,
+        grades: lastDisk.grades,
+        recycleBin: lastDisk.recycleBin,
+        disks: lastDisk.disks,
+        cleanedAt: lastDisk.cleanedAt || null
+      };
+    },
+    scan: doDiskScan,
+    peek: doDiskPeek,
+    clean: doDiskClean,
+    cancelScan: () => { diskAbort = true; },
+    cancelClean: () => { diskCleanAbort = true; }
+  };
 
   ipcMain.handle('tier:plan', async () => {
     if (!lastScan) throw new Error('还没有扫描结果');
