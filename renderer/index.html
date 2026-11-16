@@ -79,6 +79,15 @@
           </div>
         </div>
 
+        <div class="disk-ai-banner" id="diskAiBanner">
+          <div class="dab-mark">AI</div>
+          <div class="dab-text">
+            <b>不想自己一项项看？让 AI 帮你读这份体检</b>
+            <span>开启后，对 Cursor / Claude 说一句「我的盘为什么满」，它先看清三档，再给你清单——你点头才删。</span>
+          </div>
+          <button id="btnDiskAiSetup" class="btn btn-ghost btn-sm" type="button">让 AI 接手</button>
+        </div>
+
         <div class="disk-drives" id="diskDrives">
           <div class="disk-drive-loading">正在读取磁盘…</div>
         </div>
@@ -325,7 +334,7 @@
       <nav class="settings-tabs" id="settingsTabs">
         <button class="active" data-tab="general" type="button" data-i18n="set.tabGeneral">常规</button>
         <button data-tab="ai" type="button" data-i18n="set.tabAi">AI 接入</button>
-        <button data-tab="mcp" type="button">MCP</button>
+        <button data-tab="mcp" type="button" data-i18n="set.tabMcp">让 AI 接手</button>
         <button data-tab="about" type="button" data-i18n="set.tabAbout">关于</button>
       </nav>
 
@@ -449,12 +458,12 @@
         </section>
 
         <section class="settings-panel" data-panel="mcp">
-          <div class="ai-block">
+          <div class="ai-block ai-hero">
             <div class="ai-block-head">
-              <h3>内置 MCP 服务</h3>
+              <h3>让 AI 帮你管这台电脑</h3>
               <span class="inline-status" id="mcpStatus">未启动</span>
             </div>
-            <p class="hint">开启后，Cursor、Claude 等支持 MCP 的 AI 工具可以检索、整理你的文件库。服务只监听 127.0.0.1，不对局域网开放。</p>
+            <p class="hint">开启后，你可以直接对 Cursor、Claude 说「我的盘为什么满」「帮我清掉缓存」。AI 先给清单，你点头才删。服务只监听 127.0.0.1，不对局域网开放。</p>
             <div class="field-row">
               <button id="btnMcpToggle" class="btn btn-primary btn-sm" type="button">开启 MCP</button>
               <span class="mcp-endpoint" id="mcpEndpoint">—</span>
@@ -462,22 +471,37 @@
           </div>
 
           <div class="ai-block">
-            <h3>配置片段（复制到 AI 工具里）</h3>
-            <p class="hint">Cursor：设置 → MCP → 添加服务器，粘贴下面的 HTTP 配置。</p>
+            <h3>第一步：复制配置，粘到 AI 工具里</h3>
+            <p class="hint">Cursor：设置 → MCP → 添加服务器，粘贴下面的配置。</p>
             <div class="code-block">
               <pre id="mcpConfigText">开启 MCP 后显示配置</pre>
               <button id="btnCopyMcp" class="btn btn-ghost btn-sm" type="button">复制</button>
             </div>
           </div>
 
+          <div class="ai-block">
+            <h3>第二步：复制一句话，直接对 AI 说</h3>
+            <p class="hint">把这句话发给你的 AI 助手，它就知道怎么接手了。</p>
+            <div class="code-block prompt-block">
+              <pre id="mcpPromptText">我的盘快满了。先用 AI产出管家 的 disk_status 看看三档各占多少；对「占地大户」用 disk_peek 一层层查清是什么；然后把「能安全清掉」的清单给我确认——在我点头之前别删任何东西。</pre>
+              <button id="btnCopyMcpPrompt" class="btn btn-ghost btn-sm" type="button">复制</button>
+            </div>
+          </div>
+
           <div class="ai-block muted">
-            <h3>提供的工具</h3>
+            <h3>AI 拿到这些能力</h3>
             <ul class="plain-list">
-              <li><code>search_files</code> — 搜索文件</li>
-              <li><code>get_file_summary</code> — 看某个文件讲什么</li>
-              <li><code>list_by_category</code> — 按分类列文件</li>
-              <li><code>archive_files</code> — 把文件收进整理目录（原处不留）</li>
+              <li><code>disk_status</code> / <code>disk_scan</code> — 读体检结果、触发体检</li>
+              <li><code>disk_peek</code> — 逐层查看大目录里是什么</li>
+              <li><code>disk_cleanup</code> — 清缓存/依赖（先给清单，确认后才删，进回收站）</li>
+              <li><code>search_files</code> / <code>get_file_summary</code> / <code>list_by_category</code> / <code>archive_files</code> — 整理 AI 文件</li>
             </ul>
+            <p class="hint">项目依赖、系统目录、第一层大目录都不会被自动清。完整说明见仓库里的 AI-SKILL.md。</p>
+          </div>
+
+          <div class="mcp-brandbar">
+            <span>智维工作室 · Zhiwei Studio</span>
+            <a href="#" id="mcpHomepage">www.zhiweistudio.com.cn</a>
           </div>
         </section>
 
@@ -491,7 +515,7 @@
               </svg>
             </div>
             <h3>AI产出管家</h3>
-            <p class="about-version" id="aboutVersion">v0.9.0</p>
+            <p class="about-version" id="aboutVersion">v0.9.1</p>
             <p class="about-desc">专门管理 AI 产出文件的本地工具。全程免费，零遥测：不联网上报、不统计使用情况，连「你清了多少个文件」这种数字都只存在你自己的电脑上。</p>
           </div>
 
@@ -589,6 +613,40 @@
         <span class="tidy-hint" id="tidyHint">现在是预演：只看清单，不动任何文件。</span>
         <button id="btnTidyCancel" class="btn btn-ghost btn-sm" type="button">关闭</button>
         <button id="btnTidyRun" class="btn btn-primary btn-sm" type="button">按这份清单执行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.9 清掉「能安全清掉」那一档：先摊开看清，再点头 -->
+  <div class="modal-mask hidden" id="diskCleanModal">
+    <div class="modal">
+      <header class="modal-head">
+        <h2 id="diskCleanTitle">清掉这一档（还没动任何文件）</h2>
+        <button class="icon-btn" id="btnCloseDiskClean" type="button" title="关闭">×</button>
+      </header>
+      <div class="trash-note" id="diskCleanNote"></div>
+      <div class="tidy-body" id="diskCleanBody"></div>
+      <div class="trash-foot">
+        <span class="tidy-hint" id="diskCleanHint">没点「确认清掉」之前，一个文件夹都不会动。</span>
+        <button id="btnDiskCleanRun" class="btn btn-primary btn-sm" type="button">确认清掉</button>
+        <button id="btnCloseDiskClean2" class="btn btn-ghost btn-sm" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v0.9 看看里面：这块到底装的是什么 -->
+  <div class="modal-mask hidden" id="diskPeekModal">
+    <div class="modal">
+      <header class="modal-head">
+        <h2 id="diskPeekTitle">里面装的是什么</h2>
+        <button class="icon-btn" id="btnCloseDiskPeek" type="button" title="关闭">×</button>
+      </header>
+      <div class="trash-note" id="diskPeekNote"></div>
+      <div class="tidy-body" id="diskPeekBody"></div>
+      <div class="trash-foot">
+        <span class="tidy-hint">这里显示的是这一层里最占地方的 10 项，不代表其他东西不重要。</span>
+        <button id="btnDiskPeekReveal" class="btn btn-ghost btn-sm" type="button">在文件夹里打开</button>
+        <button id="btnCloseDiskPeek2" class="btn btn-ghost btn-sm" type="button">关闭</button>
       </div>
     </div>
   </div>
