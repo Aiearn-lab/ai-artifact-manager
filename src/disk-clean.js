@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fsp = require('fs/promises');
-const { isSystemTop } = require('./disk-scan');
+const { isSystemTop, isUnderSystemPath, isInsideProgramData } = require('./disk-scan');
 const { gradeDir } = require('./disk-classify');
 
 /**
@@ -110,7 +110,10 @@ async function inspect(target, root) {
 
   const name = path.basename(abs);
   if (!name) return { ok: false, reason: '路径不完整' };
-  if (isSystemTop(name)) return { ok: false, reason: '这是系统目录' };
+  // 末级名 + 整条路径双重检查：C:\Windows\System32\winevt\Logs 末级叫 Logs，
+  // 只看名字会放行，必须看完整路径才发现它在 Windows 里面。
+  if (isSystemTop(name) || isUnderSystemPath(abs)) return { ok: false, reason: '这是系统目录' };
+  if (isInsideProgramData(abs)) return { ok: false, reason: '这是程序自己的数据目录，删了程序会出错' };
   if (/\$recycle\.bin/i.test(abs)) return { ok: false, reason: '这是回收站自己的目录' };
   if (/^(windows|program files|program files \(x86\)|programdata|users)$/i.test(name)) {
     return { ok: false, reason: '这是系统或程序目录' };
