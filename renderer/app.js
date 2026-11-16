@@ -257,7 +257,7 @@ function bindEvents() {
   $('#btnQuickScan').addEventListener('click', quickScan);
   $('#btnPickFolder').addEventListener('click', pickFolder);
   // v0.8 小白首屏：空状态「帮我扫一扫」= 全盘扫描入口（和顶部按钮同一个流程），
-  // 旧行为只扫桌面/下载/文档——哥哥判过「AI 产出一般不放这几个地方」，废弃。
+  // 旧行为只扫桌面/下载/文档——实测「AI 产出一般不放这几个地方」，已废弃。
   $('#btnEmptyScan').addEventListener('click', () => {
     if (state.busy) return;
     openDiskModal();
