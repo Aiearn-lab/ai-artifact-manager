@@ -19,12 +19,18 @@ const path = require('path');
  * 署名：智维工作室 / Zhiwei Studio
  */
 
-// 这些目录里全是可重建的东西，单独归类，统计时也单独算
+// 这些目录里全是可重建的东西，单独归类，统计时也单独算。
+//
+// 真机回归后刻意移除三类名字——它们"理论可重建、实际删了会断当前工作"：
+// - bin：<工具>\bin（Qoder/Kimi/JDK/运行时）是程序本体的可执行文件
+// - node_modules / site-packages：程序自带的那份删了程序就跑不起来；项目那份本来就有项目依赖保护
+// - venv / .venv / env：虚拟环境，重装依赖可能受网络影响装不回来
+// 留下的都是真正的缓存/字节码/构建产物，删了无感或能自动重建。
 const REBUILDABLE_DIRS = new Set([
-  'node_modules', '__pycache__', '.venv', 'venv', 'env',
+  '__pycache__',
   'dist', 'build', 'out', 'target', 'release', '.next', '.nuxt',
   '.cache', '.parcel-cache', '.turbo', '.gradle', '.m2',
-  'site-packages', 'obj', 'bin', 'Debug', 'Release'
+  'obj', 'Debug', 'Release'
 ]);
 
 const SYSTEM_DIRS = new Set([
@@ -39,6 +45,34 @@ function isRebuildableName(name) {
 
 function isSystemTop(name) {
   return SYSTEM_DIRS.has(String(name || '').toLowerCase());
+}
+
+// 程序的数据目录 / 安装目录特征：这些目录的"名字"再像缓存也不能清，
+// 因为里面装的是正在运行的程序自己的东西。真机实测命中的：
+//   DoubaoData\...\pip_runtime\cache（9GB）、deepseek\resources\app.asar.unpacked、Node 安装目录…
+const PROGRAM_DATA_HINT = /(user data|app\.asar|\\resources\\|pip_runtime|sandbox_runtime|deliveryoptimization|node-v?\d|electron\\cache|\.workbuddy|wechat files|xwechat_files)/i;
+
+function isInsideProgramData(target) {
+  return PROGRAM_DATA_HINT.test(String(target || ''));
+}
+
+/**
+ * 整条路径里只要任何一层是系统目录，就当系统目录处理。
+ *
+ * 为什么需要这个：真机上 C:\Windows\System32\winevt\Logs 最后一级叫 "Logs"，
+ * 单独看名字会被当成"日志缓存"判成可清。但它躺在 Windows 里面，是系统事件日志。
+ * 判档和清理守门都必须看完整路径，不能只看末级名。
+ */
+function isUnderSystemPath(target) {
+  const parts = String(target || '')
+    .replace(/[\\/]+/g, '/')
+    .split('/')
+    .filter(Boolean);
+  // 跳过开头的盘符（C:），检查后面每一段
+  for (const part of parts) {
+    if (SYSTEM_DIRS.has(part.toLowerCase())) return true;
+  }
+  return false;
 }
 
 /**
@@ -215,6 +249,8 @@ module.exports = {
   measureRecycleBin,
   isRebuildableName,
   isSystemTop,
+  isUnderSystemPath,
+  isInsideProgramData,
   REBUILDABLE_DIRS,
   SYSTEM_DIRS
 };
