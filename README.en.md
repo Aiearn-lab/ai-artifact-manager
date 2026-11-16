@@ -1,89 +1,51 @@
 <div align="center">
   <img src="assets/icon.png" width="96" alt="AI Artifact Manager">
   <h1>AI Artifact Manager</h1>
-  <p><b>See why your disk is full first — then sort out what AI tools left behind</b></p>
   <p>
-    <img alt="MIT" src="https://img.shields.io/badge/license-MIT-2563eb">
+    <img alt="license" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-0.9.0-6366f1">
-    <img alt="no cloud" src="https://img.shields.io/badge/data-100%25%20local-059669">
+    <img alt="version" src="https://img.shields.io/badge/version-0.9.1-6366f1">
+    <img alt="local" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
-  <p>
-    <a href="README.md">中文</a> · <b>English</b>
-  </p>
+  <p><a href="README.md">中文</a> · <b>English</b></p>
 </div>
 
-If you work with ChatGPT, Claude, DeepSeek or Cursor, your disk fills up with `untitled.md`, `proposal_v3_final(2).md` and files you can't even attribute — every AI tool dumps its output somewhere, and generic cleanup tools have no idea what any of it is. This app does that one job: **offline, free, nothing leaves your machine.**
+Manages the files AI tools pile up on your computer. Offline, free, nothing leaves the machine; deletions go to the Windows Recycle Bin and can be restored.
 
-> Heads-up: since v0.8 the in-app interface is Chinese-only (beginner-first redesign). This README stays as the English reference.
+> Since v0.8 the in-app interface is Chinese-only. This README is the English reference.
 
 ![Main window](docs/screenshots/en/main.png)
 
-![Disk checkup: what ate this drive — three tiers that add up exactly](docs/screenshots/disk.png)
-
 ## Download
 
-**[⬇ Latest release (Windows 64-bit, ~95 MB)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest)** — portable, unzip and double-click. No installer, no account, no Node required.
+[Latest release (Windows 64-bit)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest) — portable, unzip and double-click. No installer or account. If Windows shows "protected your PC" on first launch, click More info → Run anyway.
 
-First launch may show Windows' "protected your PC" screen — that's because we haven't paid for a code-signing certificate yet, not because the file is unsafe: click More info → Run anyway.
+## Three steps
 
-Or run from source (bottom of this page).
+1. You land on **Disk checkup**. Click "Check this drive"; seconds later you see three tiers — **safe to clear / big blocks / hands off** — whose numbers add up exactly to the drive's real usage. "Open" jumps to the folder
+2. **AI files** recognizes and categorizes AI output; **Slim down** handles work by confidence tier
+3. The **Stash box** lets you put anything back; the **Monthly note** shows what happened this month
 
-## Three steps (v0.9: see first, touch later)
+![Disk checkup](docs/screenshots/disk.png)
 
-1. **Start with Disk checkup** — it's the first tab. One click measures the drive in a few seconds and splits it into three tiers: **safe to clear / big blocks / hands off**. The three numbers add up exactly to the drive's real usage, so you can see at a glance what the biggest item is and where it lives — "Open" jumps straight to that folder
-2. **Then AI files** — the butler walks the whole PC on first launch; broad scanning is safe because protection comes from hard exclusions and full reversibility, not from narrowing the scan. When you're ready to act, Slim-down lays the work out in three tiers by confidence
-3. **Stash box & Monthly note** — anything tucked away can be put back anytime; the note page shows what the butler did this month
+## Features
 
-## What it does
-
-- **Disk checkup (new in v0.9)** — measures sizes only, touches nothing, and answers "why is my drive full". Each drive is split into three tiers: **safe to clear** (caches, dependencies, build output — reinstall or rebuild and it's back), **big blocks** (the largest items; the tool refuses to judge whether they're deletable and just points you at them with a one-click "Open"), and **hands off** (system, programs, game data, photos, source). The tiers add up **exactly** to the drive's usage, and whatever the recycle bin is still holding is reported too. The scan can be stopped at any time
-- **Scan** the whole PC on install, or pick a folder. System folders, program folders and known AI-tool cache directories (.accio, Coze, .qoder…) are skipped by default
-- **Detect AI output** by filename patterns, header comments and export formats. Exactly two labels: **AI tool / Unknown** — guessing a wrong vendor name costs more trust than not guessing at all
-- **Categorize**: Knowledge / Reusable script / One-off script / Disposable, each with a one-line reason
-- **One-click Slim-down (three-tier responsibility)**: the tool's confidence decides how hard it acts — byte-identical copies go straight to the Windows Recycle Bin (keepers are never touched); multiple versions of the same file are grouped into cards, and old versions are deleted only after you nod once per group ("keep newest, delete old"); anything still uncertain is **moved to a stash box, never deleted**
-- **Stash box**: everything tucked away stays there with no expiry — review it, put files back anytime; emptying it is always your choice, never an auto-action
-- **Resident note**: a one-line weekly summary lives in the system tray, and the in-app note page shows four numbers for this month (tucked away / put back / space freed / tidied into archive). All computed from local logs — **zero telemetry**
-- **Archive** what you keep into one folder (always a move, never a copy — a tidying tool must not leave you with more files)
-- **Deduplicate**: SHA-256 full-file hashing for identical files, 3-gram similarity for near-identical ones; recommends which copy to keep. **Every row is tagged either "auto-cleaned" or "your call"** — identical copies that sit inside a project folder (say the same `package.json` in both the source tree and the release directory) are only listed, never touched; you decide
-- **Search inside files** when you remember what you wrote but not what you named it; matches are highlighted inline
-- **Auto watch** folders — new AI output is recognized and categorized within seconds (notify only, it never touches files)
-- **Bring your own AI (optional)**: one-click Ollama / LM Studio, or any OpenAI-compatible key — unlocks summaries, smart renames, side-by-side compare. Everything works without it
-
-![Stats](docs/screenshots/en/stats.png)
+- **Disk checkup** — measures sizes only, touches nothing, shows the biggest items and where they live, including what the recycle bin is holding
+- **One-click cleanup** — clears only the "safe to clear" tier (caches, dependencies, build output); project dependencies are skipped, deletions go to the Recycle Bin, and you see the list before anything happens
+- **Peek inside** — walk into a large directory one level at a time to find out what the 177 GB actually is
+- **Duplicates** — SHA-256 for identical files, similarity for near-identical ones; every row is tagged "auto-cleaned" or "your call", and copies inside projects are only listed
+- **Organize & search** — archiving moves, never copies; full-text search; optional local model or your own API key for summaries and renaming
 
 ## Safety
 
-- Everything runs locally, works offline, **zero telemetry** — no usage analytics, not even "how many files you cleaned" leaves the machine
-- AI tools' own dependencies, memory and caches are **skipped at the scan layer** — they can't be touched even by mistake
-- Files of Unknown origin, files you marked "I wrote this", and project code (folders containing package.json/.git) are **never auto-touched by any tier**
-- Before deleting a duplicate copy, the keeper's existence is re-checked on the spot — if the keeper is gone, the copy stays too
-- Deletions only ever go to the **Windows Recycle Bin**, same as right-click → Delete; closing the window only hides the app to the tray — quit from the tray menu
-- Archiving is always a move, never a copy
+- Runs entirely on this machine, zero telemetry; AI tools' own dependencies, memory and caches are skipped at the scan layer
+- Unknown-origin files, files you marked "I wrote this", and project folders (containing package.json / .git) are never auto-touched by any tier
+- Deletions only ever go to the Windows Recycle Bin; archiving is always a move, never a copy
 - API keys stay in local config, never in logs or exports
 
-## For AI assistants: built-in MCP server
+## Let AI take over
 
-Flip one switch and Cursor, Claude Desktop or any MCP client can search and organize your library:
-
-| Tool | What it does |
-| --- | --- |
-| `search_files` | Search by name, path, tags, category |
-| `get_file_summary` | What a file is about |
-| `list_by_category` | List files by category |
-| `archive_files` | Move files into the archive (originals don't stay) |
-
-```json
-{
-  "mcpServers": {
-    "ai-artifact-manager": {
-      "url": "http://127.0.0.1:3927/mcp"
-    }
-  }
-}
-```
-
-Listens on `127.0.0.1` only. stdio is also supported — copy the snippet from Settings → MCP.
+Once you enable MCP in the app, Cursor, Claude and other AI tools can ask "why is my disk full" or "clear the caches". The AI shows you a list first — nothing is deleted until you say yes. Tool list, permission boundaries and connection config are in [AI-SKILL.md](AI-SKILL.md).
 
 ## Run from source
 
@@ -93,20 +55,15 @@ cd ai-artifact-manager
 npm install
 npm start        # Node.js 18+
 npm run dist     # build Windows portable
-node _test/run_test.js   # unit self-tests (tiers / stash / version chain / note in _test/)
-node _test/run_word_gate.js  # plain-language term gate (build-time regex over the UI)
-./node_modules/.bin/electron _test/e2e.js  # end-to-end (real window, real delete + restore)
+node _test/run_test.js        # unit self-tests (more in _test/)
+node _test/run_word_gate.js   # plain-language term gate
 ```
 
-> The in-app interface has been Chinese-only since v0.8, so the English UI screenshots above were taken on v0.7 and are kept as historical reference. For the current v0.8 interface, see the Chinese README ([README.md](README.md)), whose screenshots were retaken in this release.
-
-## Free
-
-MIT licensed, every feature free, no Pro tier. If it saves you time, a star is the best thanks.
+## Contact
 
 **Zhiwei Studio** · [www.zhiweistudio.com.cn](https://www.zhiweistudio.com.cn) · 7388603@qq.com
-We build AI apps, desktop tools and automation for clients — get in touch if you need something custom.
+We build AI apps, desktop tools and automation for clients.
 
 ## License
 
-MIT © 2026 Zhiwei Studio
+[MIT](LICENSE) © 2026 Zhiwei Studio
