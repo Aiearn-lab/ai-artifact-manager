@@ -1871,7 +1871,7 @@ async function init() {
 
   // 首次启动在桌面放一个指向本程序的快捷方式。
   // 只在打包版、非测试模式执行：开发时 npm start 指向 electron.exe，建了也没意义；
-  // 回归测试更不能往哥哥真实桌面写东西。失败一律安静跳过，绝不阻断启动。
+  // 回归测试更不能往用户真实桌面写东西。失败一律安静跳过，绝不阻断启动。
   if (app.isPackaged && !isE2E) {
     try {
       const r = await ensureDesktopShortcut({
