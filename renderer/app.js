@@ -323,6 +323,21 @@ function bindEvents() {
   });
 
   $('#diskGroups').addEventListener('click', async (e) => {
+    const cleanAll = e.target.closest('[data-clean-all]');
+    if (cleanAll) {
+      openDiskClean(null);
+      return;
+    }
+    const cleanOne = e.target.closest('[data-clean-one]');
+    if (cleanOne) {
+      openDiskClean([cleanOne.dataset.cleanOne]);
+      return;
+    }
+    const peek = e.target.closest('[data-peek]');
+    if (peek) {
+      openDiskPeek(peek.dataset.peek);
+      return;
+    }
     const toggle = e.target.closest('[data-toggle]');
     if (toggle) {
       const k = toggle.dataset.toggle;
@@ -354,6 +369,47 @@ function bindEvents() {
       if (r && r.saved) toast('体检结果已存好，可以随时翻出来看');
     } catch (err) {
       toast(`没存成功：${err.message}`, true);
+    }
+  });
+
+  /* ---- 清掉「能安全清掉」这一档 ---- */
+  $('#btnDiskCleanRun').addEventListener('click', async () => {
+    const btn = $('#btnDiskCleanRun');
+    if (btn.dataset.mode === 'openTrash') {
+      try {
+        await window.api.openTrash();
+      } catch (err) {
+        toast(err.message, true);
+      }
+      return;
+    }
+    runDiskClean();
+  });
+  $('#btnCloseDiskClean').addEventListener('click', closeDiskClean);
+  $('#btnCloseDiskClean2').addEventListener('click', closeDiskClean);
+  $('#diskCleanModal').addEventListener('click', (e) => {
+    if (e.target === $('#diskCleanModal')) closeDiskClean();
+  });
+
+  /* ---- 看看里面 ---- */
+  $('#diskPeekBody').addEventListener('click', (e) => {
+    const go = e.target.closest('[data-peek]');
+    if (!go) return;
+    // 不允许从弹窗钻出体检范围（主进程还会再挡一次）
+    openDiskPeek(go.dataset.peek);
+  });
+  $('#btnCloseDiskPeek').addEventListener('click', () => $('#diskPeekModal').classList.add('hidden'));
+  $('#btnCloseDiskPeek2').addEventListener('click', () => $('#diskPeekModal').classList.add('hidden'));
+  $('#diskPeekModal').addEventListener('click', (e) => {
+    if (e.target === $('#diskPeekModal')) $('#diskPeekModal').classList.add('hidden');
+  });
+  $('#btnDiskPeekReveal').addEventListener('click', async (e) => {
+    const p = e.currentTarget.dataset.path;
+    if (!p) return;
+    try {
+      await window.api.diskReveal(p);
+    } catch (err) {
+      toast(err.message, true);
     }
   });
 
@@ -566,6 +622,12 @@ function bindEvents() {
 
   $('#btnMcpToggle').addEventListener('click', toggleMcp);
   $('#btnCopyMcp').addEventListener('click', copyMcpConfig);
+  $('#btnCopyMcpPrompt').addEventListener('click', copyMcpPrompt);
+  $('#btnDiskAiSetup').addEventListener('click', openAiTakeover);
+  $('#mcpHomepage').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.api.openUrl('https://www.zhiweistudio.com.cn');
+  });
 
   $('#aiResult').addEventListener('click', onAiAction);
 
@@ -2578,6 +2640,22 @@ async function copyMcpConfig() {
   }
 }
 
+async function copyMcpPrompt() {
+  const text = $('#mcpPromptText').textContent.trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('提示词已复制，发给你的 AI 助手就行');
+  } catch {
+    toast(t('msg.copyFail'), true);
+  }
+}
+
+async function openAiTakeover() {
+  await openSettings();
+  const tab = $('#settingsTabs button[data-tab="mcp"]');
+  if (tab) tab.click();
+}
+
 /* ---------------- 统计 ---------------- */
 function openStats() {
   renderStats();
@@ -2925,13 +3003,22 @@ function renderDiskGroups(res) {
           const hasDeeper = allPaths.some((p) => p !== full && p.startsWith(full.endsWith('\\') ? full : full + '\\'));
           const label = (rel || it.name || full).replace(/^\\+/, '');
           const name = hasDeeper ? `${label}（本级零散文件）` : label;
+          // 项目依赖：名字看着能重建，但清掉项目就跑不起来。标出来、不给清按钮、也不算进可清体积。
+          const proj = it.inProject ? String(it.inProject) : '';
+          const why = proj ? `这是 ${proj} 的依赖，清掉项目就跑不起来` : it.why || GRADE_META[k].head;
           return `<div class="disk-row">
             <div class="dr-path">
-              <div class="dr-name">${esc(name || full)}</div>
+              <div class="dr-name">${esc(name || full)}${proj ? '<span class="dr-tag">项目依赖·不会清</span>' : ''}</div>
               <div class="dr-full" title="${esc(full)}">${esc(full)}</div>
             </div>
-            <div class="dr-why" title="${esc(it.why || '')}">${esc(it.why || GRADE_META[k].head)}</div>
+            <div class="dr-why" title="${esc(why)}">${esc(why)}</div>
             <div class="dr-size">${fmtSize(it.size)}</div>
+            ${
+              k === 'safe' && !proj
+                ? `<button class="btn btn-ghost btn-sm dr-btn" type="button" data-clean-one="${esc(full)}">清掉</button>`
+                : ''
+            }
+            ${k !== 'safe' ? `<button class="btn btn-ghost btn-sm dr-btn" type="button" data-peek="${esc(full)}">看看里面</button>` : ''}
             <button class="btn btn-ghost btn-sm dr-btn" type="button" data-reveal="${esc(full)}">打开</button>
           </div>`;
         })
@@ -2942,12 +3029,24 @@ function renderDiskGroups(res) {
               items.slice(12).reduce((n, x) => n + x.size, 0)
             )}　<button class="btn btn-ghost btn-sm" type="button" data-showall="${k}">全部展开</button></div>`
           : '';
+      // 只有「能安全清掉」这一档给清理按钮；另外两档连按钮都不出现，
+      // 免得用户以为"占地大户"也能一键清。
+      // 按钮上的数字只算真能清的（项目依赖要扣掉），免得点了才发现少了几处。
+      const cleanable = k === 'safe' ? items.filter((it) => !it.inProject) : [];
+      const cleanSize = cleanable.reduce((n, it) => n + (it.size || 0), 0);
+      const cleanBtn =
+        k === 'safe' && cleanable.length
+          ? `<button class="btn btn-primary btn-sm dg-clean" type="button" data-clean-all="1">清掉这一档（${cleanable.length} 处 · ${fmtSize(
+              cleanSize
+            )}）</button>`
+          : '';
       return `<div class="disk-group${open}" data-grade="${k}">
         <div class="disk-group-head" data-toggle="${k}">
           <span class="dg-dot ${k}"></span>
           <span class="dg-name">${meta.label} · ${meta.head}</span>
           <span class="dg-size">${fmtSize(bucket.size)}</span>
           <span class="dg-count">${bucket.count} 处</span>
+          ${cleanBtn}
           <span class="dg-caret">▶</span>
         </div>
         <div class="disk-group-body">
@@ -3011,6 +3110,234 @@ function buildDiskReport() {
   lines.push('---');
   lines.push('由 AI产出管家 生成 · 智维工作室 Zhiwei Studio · www.zhiweistudio.com.cn');
   return lines.join('\n');
+}
+
+/* ---------- 清掉「能安全清掉」这一档 ---------- */
+// 规矩和别处一样：先摊开给人看，点头才动，动了要说清去了哪。
+const diskClean = { paths: null, running: false, lastResult: null };
+
+function openDiskClean(paths) {
+  const res = diskState.result;
+  if (!res || !res.grades || !res.grades.safe) {
+    toast('先做一次体检', true);
+    return;
+  }
+  const all = res.grades.safe.items || [];
+  const want = paths && paths.length ? new Set(paths.map(String)) : null;
+  // 项目依赖永远不进清理清单（体检时已经标好的，这里再挡一次）
+  const list = all
+    .filter((it) => it && it.path && !it.inProject)
+    .filter((it) => (want ? want.has(String(it.path)) : true));
+  if (!list.length) {
+    toast('这一档现在没有可清的东西');
+    return;
+  }
+  diskClean.paths = list.map((it) => it.path);
+  diskClean.lastResult = null;
+  diskClean.running = false;
+
+  const total = list.reduce((n, it) => n + (it.size || 0), 0);
+  const root = String(res.root || '');
+  $('#diskCleanTitle').textContent = want ? '清掉这一个（还没动任何文件）' : '清掉这一档（还没动任何文件）';
+  $('#diskCleanNote').innerHTML = `即将清掉 <b>${list.length}</b> 处，共 <b>${fmtSize(
+    total
+  )}</b>。这些是缓存、依赖包、编译产物——删了以后要用的时候重新装一次、重新编一次就回来了。`;
+
+  const rows = list
+    .slice(0, 12)
+    .map((it) => {
+      const full = String(it.path);
+      const rel = full.startsWith(root) ? full.slice(root.length).replace(/^\\+/, '') : full;
+      return `<div class="disk-row">
+        <div class="dr-path"><div class="dr-name">${esc(rel)}</div><div class="dr-full" title="${esc(full)}">${esc(full)}</div></div>
+        <div class="dr-why">${esc(it.why || '')}</div>
+        <div class="dr-size">${fmtSize(it.size)}</div>
+      </div>`;
+    })
+    .join('');
+
+  $('#diskCleanBody').innerHTML = `
+    <div class="disk-clean-note">
+      <div class="dcn-item"><b>会进 Windows 回收站</b><span>和你在资源管理器里右键删除完全一样。清完还能在系统回收站里找到它，右键「还原」就回来了。管家从不做永久删除。</span></div>
+      <div class="dcn-item"><b>项目里的依赖会自动跳过</b><span>旁边有 package.json / .git / requirements.txt 的，说明是某个项目正在用，清掉项目就跑不起来了——这类一律不动。</span></div>
+    </div>
+    <div class="disk-clean-list">${rows}</div>
+    ${
+      list.length > 12
+        ? `<div class="disk-row-more">还有 ${list.length - 12} 处没有列出来，合计 ${fmtSize(
+            list.slice(12).reduce((n, x) => n + (x.size || 0), 0)
+          )}</div>`
+        : ''
+    }`;
+
+  const runBtn = $('#btnDiskCleanRun');
+  runBtn.dataset.mode = '';
+  runBtn.textContent = `确认清掉这 ${list.length} 处`;
+  runBtn.classList.remove('hidden');
+  runBtn.disabled = false;
+  $('#diskCleanHint').textContent = '没点「确认清掉」之前，一个文件夹都不会动。';
+  $('#diskCleanModal').classList.remove('hidden');
+}
+
+function closeDiskClean() {
+  if (diskClean.running) return;
+  $('#diskCleanModal').classList.add('hidden');
+  diskClean.paths = null;
+}
+
+async function runDiskClean() {
+  if (diskClean.running || !diskClean.paths) return;
+  diskClean.running = true;
+  const runBtn = $('#btnDiskCleanRun');
+  runBtn.disabled = true;
+  runBtn.textContent = '正在清…';
+  $('#diskCleanHint').textContent = '正在往回收站搬，文件夹大的时候要等一会儿。别关窗口。';
+  $('#statusText').textContent = '正在清理…';
+  try {
+    const r = await window.api.diskClean({ paths: diskClean.paths });
+    diskClean.lastResult = r;
+    await renderDiskCleanResult(r);
+    // 清理后把体检结果换成主进程更新过的那份，数字立刻变小
+    try {
+      const last = await window.api.diskLast();
+      if (last) {
+        diskState.result = last;
+        renderDiskView();
+      }
+    } catch {
+      /* 拿不到就等下次体检 */
+    }
+  } catch (err) {
+    toast(`清理没做成：${err.message}`, true);
+    runBtn.disabled = false;
+    runBtn.textContent = '确认清掉';
+    $('#diskCleanHint').textContent = '这次没有动任何东西，可以换个方式再试。';
+  } finally {
+    diskClean.running = false;
+    $('#statusText').textContent = '就绪';
+  }
+}
+
+async function renderDiskCleanResult(r) {
+  const doneSize = (r.done || []).reduce((n, x) => n + (x.size || 0), 0);
+  $('#diskCleanTitle').textContent = '清理结果';
+  $('#diskCleanNote').innerHTML = (r.done || []).length
+    ? `清掉 <b>${r.done.length}</b> 处，腾出 <b>${fmtSize(doneSize)}</b>。${r.stopped ? '　（提前停下了，剩下的没动）' : ''}`
+    : '这次没有任何文件夹被清掉。';
+
+  const block = (title, items, tone, render) =>
+    items && items.length
+      ? `<div class="disk-clean-block ${tone}"><div class="dcb-title">${title}（${items.length}）</div>${items
+          .slice(0, 8)
+          .map(render)
+          .join('')}${
+          items.length > 8 ? `<div class="dcb-more">还有 ${items.length - 8} 条</div>` : ''
+        }</div>`
+      : '';
+
+  const escPath = (p, root) => {
+    const full = String(p || '');
+    return full.startsWith(root) ? full.slice(root.length).replace(/^\\+/, '') : full;
+  };
+  const root = String((diskState.result && diskState.result.root) || '');
+
+  $('#diskCleanBody').innerHTML =
+    block('已经清掉', r.done, 'ok', (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${fmtSize(it.size)}</em></div>`) +
+    block(
+      '自动跳过（按规矩不碰）',
+      r.skipped,
+      'skip',
+      (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${esc(it.reason || '')}</em></div>`
+    ) +
+    block(
+      '没清成功',
+      r.failed,
+      'fail',
+      (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${esc(it.error || '')}</em></div>`
+    ) +
+    `<div class="disk-clean-note">
+      <div class="dcn-item"><b>想还原怎么办</b><span>打开 Windows 回收站，找到那个文件夹右键「还原」，就回到原来的位置。</span></div>
+    </div>`;
+
+  const runBtn = $('#btnDiskCleanRun');
+  runBtn.textContent = '打开回收站看看';
+  runBtn.disabled = false;
+  runBtn.dataset.mode = 'openTrash';
+  $('#diskCleanHint').textContent = '这些文件夹已经在系统回收站里了，管家没有永久删除任何东西。';
+}
+
+/* ---------- 看看里面 ---------- */
+// 体检只能看到第 6 层，再往下用什么办法？
+// 用户看到「177GB」想知道里面是什么，这个弹窗就是给他一层一层走进去看的。
+// 刻意不递归算体积（那要再走一遍 177GB），点一层算一层，几十毫秒。
+const diskPeek = { path: '', parent: null };
+
+async function openDiskPeek(dirPath) {
+  diskPeek.path = String(dirPath || '');
+  $('#diskPeekTitle').textContent = '正在看…';
+  $('#diskPeekNote').textContent = '';
+  $('#diskPeekBody').innerHTML = '<div class="disk-row-more">正在数这一层的东西…</div>';
+  $('#diskPeekModal').classList.remove('hidden');
+  try {
+    const r = await window.api.diskPeek(diskPeek.path);
+    diskPeek.parent = r.parent;
+    renderDiskPeek(r);
+  } catch (err) {
+    $('#diskPeekTitle').textContent = '看不了这个目录';
+    $('#diskPeekNote').textContent = '';
+    $('#diskPeekBody').innerHTML = `<div class="disk-row-more">${esc(err.message)}</div>`;
+  }
+}
+
+function renderDiskPeek(r) {
+  const root = String((diskState.result && diskState.result.root) || '');
+  const rel = (p) => {
+    const full = String(p || '');
+    const s = full.startsWith(root) ? full.slice(root.length).replace(/^\\+/, '') : full;
+    return s || full;
+  };
+  const name = rel(r.path) || r.path;
+  $('#diskPeekTitle').textContent = name;
+
+  const fileRows = (r.files || [])
+    .map(
+      (f) => `<div class="disk-row">
+        <div class="dr-path">
+          <div class="dr-name">${esc(f.name)}</div>
+          <div class="dr-full">${esc(f.ext || '无扩展名')}　${new Date(f.mtime).toLocaleDateString('zh-CN')}</div>
+        </div>
+        <div class="dr-size">${fmtSize(f.size)}</div>
+      </div>`
+    )
+    .join('');
+
+  const dirRows = (r.dirs || [])
+    .map(
+      (d) => `<button class="disk-row peek-dir" type="button" data-peek="${esc(d.path)}">
+        <div class="dr-path"><div class="dr-name">${esc(d.name)}</div><div class="dr-full">文件夹 · 点进去接着看</div></div>
+        <div class="dr-size">›</div>
+      </button>`
+    )
+    .join('');
+
+  $('#diskPeekNote').innerHTML =
+    `这一层的文件加起来 <b>${fmtSize(r.fileBytes)}</b>（${r.fileCount} 个文件` +
+    (r.dirCount ? `，另有 <b>${r.dirCount}</b> 个子文件夹` : '') +
+    `）。子文件夹里的东西没算进来——点进去看。`;
+
+  $('#diskPeekBody').innerHTML = `
+    ${fileRows ? `<div class="peek-sec-title">最占地方的 ${r.files.length} 个文件</div><div class="disk-clean-list">${fileRows}</div>` : ''}
+    ${dirRows ? `<div class="peek-sec-title">里面的文件夹（${r.dirCount} 个${r.dirCount > 40 ? '，只列前 40' : ''}）</div><div class="disk-clean-list">${dirRows}</div>` : ''}
+    ${!fileRows && !dirRows ? '<div class="disk-row-more">这一层是空的</div>' : ''}
+    ${r.skipped ? `<div class="disk-row-more">另有 ${r.skipped} 项打不开或不是普通文件，跳过了</div>` : ''}
+    ${
+      r.parent
+        ? `<div class="peek-up"><button class="btn btn-ghost btn-sm" type="button" data-peek="${esc(r.parent)}">↑ 返回上一层</button></div>`
+        : ''
+    }`;
+
+  const reveal = $('#btnDiskPeekReveal');
+  reveal.dataset.path = r.path;
 }
 
 /* ---------------- 启动 ---------------- */
