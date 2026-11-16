@@ -1,0 +1,9 @@
+# AI产出管家 (ai-artifact-manager)
+
+> 本机磁盘体检与 AI 文件管理工具。离线、免费、数据不出本机；删除进 Windows 回收站，可还原。
+
+- [AI-SKILL.md](AI-SKILL.md): AI 助手接手本工具的完整说明——连接配置、8 个 MCP 工具、推荐流程、安全边界。AI 来访请先读这一份。
+- [README.md](README.md): 人类用户的安装与三步上手。
+- [README.en.md](README.en.md): English user guide.
+
+Made by Zhiwei Studio · www.zhiweistudio.com.cn · 7388603@qq.com — AI apps, desktop tools and automation.
