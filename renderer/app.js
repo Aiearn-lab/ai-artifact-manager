@@ -37,7 +37,7 @@ const state = {
   files: [],
   filtered: [],
   filter: { cat: 'all', source: 'all', q: '', sort: 'mtime' },
-  view: 'files',
+  view: 'disk',
   selection: new Set(),
   currentId: null,
   localAi: [],
@@ -181,6 +181,9 @@ async function init() {
     state.appPaths = {};
   }
 
+  // 空间体检页先开箱可用：磁盘容量立刻读出来，体检按钮是可点的
+  await loadDiskDrives();
+
   let info = {};
   try {
     info = await window.api.appInfo();
@@ -223,8 +226,15 @@ async function init() {
     const label = {
       scanning: t('prog.scanning'),
       classifying: t('prog.classifying'),
-      deduping: t('prog.deduping')
+      deduping: t('prog.deduping'),
+      diskScan: t('prog.diskScan', { n: p.done || 0 })
     }[p.phase] || t('prog.working');
+    if (p.phase === 'diskScan') {
+      bar.classList.remove('hidden');
+      fill.style.width = '45%';
+      $('#statusText').textContent = label;
+      return;
+    }
     $('#statusText').textContent = p.phase === 'scanning' && p.done ? t('prog.scanned', { n: p.done }) : label;
   });
 
@@ -291,6 +301,60 @@ function bindEvents() {
     const btn = e.target.closest('.nav-tab');
     if (!btn) return;
     setView(btn.dataset.view);
+  });
+
+  /* ---- 空间体检 ---- */
+  $('#btnDiskScan').addEventListener('click', () => {
+    // 体检要数几十万个文件，等不及的时候得能停下来
+    if (diskState.busy) {
+      diskState.cancelling = true;
+      $('#btnDiskScan').textContent = '正在停下…';
+      window.api.diskCancel();
+      return;
+    }
+    runDiskScan();
+  });
+
+  $('#diskDrives').addEventListener('click', (e) => {
+    const card = e.target.closest('.disk-drive');
+    if (!card) return;
+    diskState.picked = card.dataset.root;
+    renderDiskDrives();
+  });
+
+  $('#diskGroups').addEventListener('click', async (e) => {
+    const toggle = e.target.closest('[data-toggle]');
+    if (toggle) {
+      const k = toggle.dataset.toggle;
+      diskState.open[k] = !diskState.open[k];
+      renderDiskGroups(diskState.result);
+      return;
+    }
+    const all = e.target.closest('[data-showall]');
+    if (all) {
+      diskState.open['all-' + all.dataset.showall] = true;
+      renderDiskGroups(diskState.result);
+      return;
+    }
+    const reveal = e.target.closest('[data-reveal]');
+    if (reveal) {
+      try {
+        await window.api.diskReveal(reveal.dataset.reveal);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    }
+  });
+
+  $('#btnDiskOpenReport').addEventListener('click', async () => {
+    const text = buildDiskReport();
+    if (!text) return;
+    try {
+      const r = await window.api.diskExport({ text });
+      if (r && r.saved) toast('体检结果已存好，可以随时翻出来看');
+    } catch (err) {
+      toast(`没存成功：${err.message}`, true);
+    }
   });
 
   $('#btnStats').addEventListener('click', openStats);
@@ -615,6 +679,12 @@ function applyScan(scan) {
 
 /* ---------------- 渲染 ---------------- */
 function renderAll() {
+  applyViewVisibility(state.view);
+  if (state.view === 'disk') {
+    renderDiskView();
+    renderNavStats();
+    return;
+  }
   renderNavStats();
   renderViewSummary();
   renderTabsCounts();
@@ -676,6 +746,7 @@ function topTags(list, n) {
 
 function renderViewSummary() {
   const el = $('#viewSummary');
+  if (state.view === 'disk') return;
   const s = state.scan && state.scan.summary;
   const all = state.files;
 
@@ -822,7 +893,25 @@ function setView(view) {
     state.filter.cat = 'all';
     $$('#categoryTabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.cat === 'all'));
   }
+
+  // 空间体检是独立的一页：把文件清单和预览两栏整块收起来，别让小白看着一屏空白
   renderAll();
+}
+
+/** 空间体检页与文件清单页互斥显示 */
+function applyViewVisibility(view) {
+  const isDisk = view === 'disk';
+  const listPanel = $('#listPanel');
+  const previewPanel = $('#previewPanel');
+  const diskPanel = $('#diskPanel');
+  if (listPanel) listPanel.classList.toggle('hidden', isDisk);
+  if (previewPanel) previewPanel.classList.toggle('hidden', isDisk);
+  if (diskPanel) diskPanel.classList.toggle('hidden', !isDisk);
+  const scanActions = $('.topbar .scan-actions');
+  if (scanActions) scanActions.classList.toggle('hidden', isDisk);
+  // 「还没扫描 · N 个文件」是 AI 文件扫描的数字，体检页看了会混淆
+  const statsBtn = $('#btnStats');
+  if (statsBtn) statsBtn.classList.toggle('hidden', isDisk);
 }
 
 function catMatch(file, cat) {
@@ -1106,6 +1195,10 @@ function autoCleanable(f) {
 }
 
 function renderList() {
+  if (state.view === 'disk') {
+    $('#tableHead').classList.add('hidden'); // 空间体检页没有表格头
+    return;
+  }
   const listEl = $('#fileList');
   const empty = $('#emptyState');
   state.filtered = computeFiltered();
@@ -2607,6 +2700,317 @@ function renderBars(container, items) {
       </div>`
     )
     .join('')}</div>`;
+}
+
+/* ---------------- v0.9 空间体检 ---------------- */
+// 这一页只回答一个问题：盘为什么满了。
+// 规矩：只统计、不动文件；三档相加必须等于实际占用；不认识的一律「别碰」。
+const diskState = {
+  drives: [],
+  picked: null,
+  result: null,
+  busy: false,
+  cancelling: false,
+  open: { safe: true, careful: false, keep: false }
+};
+
+const GRADE_META = {
+  safe: {
+    label: '能安全清掉',
+    color: '#10b981',
+    head: '装得回来的东西',
+    note: '缓存、依赖包、编译产物。删掉之后要用的时候重新装一次、重新编一次就回来了，不影响你任何成果。这一档我们敢给你数字。'
+  },
+  careful: {
+    label: '占地大户',
+    color: '#f59e0b',
+    head: '占了地方，但你说了算',
+    note: '这几块块头最大。我们没把握替你判断能不能删——可能是你留的游戏、聊天记录里的文件、下载的素材。点「打开」看一眼里面是什么，你比我们清楚。我们不给这一档任何清理建议。'
+  },
+  keep: {
+    label: '不用管',
+    color: '#94a3b8',
+    head: '不该动的',
+    note: '系统、程序、游戏本体、照片、源码。这些动了会出事，工具一律不碰。'
+  }
+};
+
+async function loadDiskDrives() {
+  try {
+    const list = await window.api.listDisks();
+    diskState.drives = (list || []).filter((d) => d && d.root && d.total);
+  } catch {
+    diskState.drives = [];
+  }
+  // 默认选中占用率最高的那块盘（用户最可能是这块满了）
+  if (!diskState.picked && diskState.drives.length) {
+    const hottest = diskState.drives
+      .slice()
+      .sort((a, b) => (b.total - b.free) / b.total - (a.total - a.free) / a.total)[0];
+    diskState.picked = (hottest || diskState.drives[0]).root;
+  }
+  renderDiskDrives();
+}
+
+function renderDiskDrives() {
+  const box = $('#diskDrives');
+  if (!box) return;
+  if (!diskState.drives.length) {
+    box.innerHTML = '<div class="disk-drive-loading">没有检测到可用的磁盘</div>';
+    const btn = $('#btnDiskScan');
+    if (btn) btn.disabled = true;
+    return;
+  }
+  box.innerHTML = diskState.drives
+    .map((d) => {
+      const used = Math.max(0, (Number(d.total) || 0) - (Number(d.free) || 0));
+      const pct = d.total ? (used / d.total) * 100 : 0;
+      const hot = pct >= 85 ? ' hot' : '';
+      const on = diskState.picked === d.root ? ' on' : '';
+      return `<button class="disk-drive${on}" type="button" data-root="${esc(d.root)}">
+        <div class="disk-drive-top">
+          <span class="disk-drive-name">${esc(d.letter)}: 盘</span>
+          <span class="disk-drive-free">剩 ${fmtSize(d.free)}</span>
+        </div>
+        <div class="disk-drive-bar${hot}"><span style="width:${pct.toFixed(1)}%"></span></div>
+        <div class="disk-drive-sub">已用 ${fmtSize(used)} · 共 ${fmtSize(d.total)}</div>
+      </button>`;
+    })
+    .join('');
+
+  const btn = $('#btnDiskScan');
+  if (btn) {
+    btn.disabled = !diskState.picked || diskState.cancelling;
+    btn.textContent = diskState.busy ? (diskState.cancelling ? '正在停下…' : '停下来') : '体检这块盘';
+  }
+  const hint = $('#diskPickHint');
+  if (hint) hint.textContent = diskState.picked ? `已选 ${String(diskState.picked).replace(/\\$/, '')} 盘` : '下面点一块盘';
+}
+
+/** 体检一块盘。只统计体积，一个文件都不动 */
+async function runDiskScan() {
+  const root = diskState.picked;
+  if (!root || diskState.busy) return;
+  diskState.busy = true;
+  diskState.cancelling = false;
+  renderDiskDrives();
+  $('#statusText').textContent = `正在数 ${root} 里的文件…（文件多的时候要等十几秒，可以随时点「停下来」）`;
+  $('#progressBar').classList.remove('hidden');
+  $('#progressFill').style.width = '12%';
+  try {
+    const res = await window.api.diskScan({ root, maxDepth: 6 });
+    diskState.result = res;
+    renderDiskView();
+    if (res.stopped) {
+      toast('停下了，没有动任何文件。想看完整结果再点一次「体检这块盘」');
+      $('#statusText').textContent = '体检已停下';
+    } else {
+      toast(`体检完了：${fmtSize(res.totalSize)}、${res.totalFiles} 个文件`);
+      $('#statusText').textContent = '体检完成，没有动任何文件';
+    }
+  } catch (err) {
+    toast(`体检没做成功：${err.message}`, true);
+    $('#statusText').textContent = '体检失败';
+  } finally {
+    diskState.busy = false;
+    diskState.cancelling = false;
+    $('#progressBar').classList.add('hidden');
+    renderDiskDrives();
+  }
+}
+
+function renderDiskView() {
+  const idle = $('#diskIdle');
+  const result = $('#diskResult');
+  if (!idle || !result) return;
+  const has = !!(diskState.result && diskState.result.grades);
+  idle.classList.toggle('hidden', has);
+  result.classList.toggle('hidden', !has);
+  if (has) renderDiskResult();
+}
+
+function renderDiskResult() {
+  const res = diskState.result;
+  if (!res || !res.grades) return;
+  const g = res.grades;
+  const total = Number(res.totalSize) || 0;
+  const grades = ['safe', 'careful', 'keep'];
+  const pct = (n) => (total ? (n / total) * 100 : 0);
+
+  // 第一行：这块盘总共多大、多少文件、数了多久
+  const totalEl = $('#diskTotal');
+  if (totalEl) {
+    const secs = res.durationMs ? Math.max(1, Math.round(res.durationMs / 1000)) : 0;
+    totalEl.innerHTML = `
+      <span class="dt-big">${fmtSize(total)}</span>
+      <span>这块盘上一共有这么多东西</span>
+      <span class="dt-chip">${(res.totalFiles || 0).toLocaleString()} 个文件</span>
+      ${secs ? `<span class="dt-chip">数完花了 ${secs} 秒</span>` : ''}`;
+  }
+
+  // 第二行：一条按体积分段的色条
+  const barEl = $('#diskBar');
+  if (barEl) {
+    barEl.innerHTML = grades
+      .map((k) => `<span class="seg-${k}" style="width:${pct(g[k].size).toFixed(2)}%" title="${GRADE_META[k].label} ${fmtSize(
+        g[k].size
+      )}"></span>`)
+      .join('');
+  }
+
+  // 第三行：图例（每一档多少、多少处）。中间档必须写清「不是都能删」，
+  // 否则一个 235GB 的数字摆在「占地大户」后面，小白会以为能清出 235GB。
+  const legendEl = $('#diskLegend');
+  if (legendEl) {
+    const extra = {
+      safe: '',
+      careful: '<span class="dl-warn">不是都能删，得你自己看一眼</span>',
+      keep: ''
+    };
+    legendEl.innerHTML = grades
+      .map(
+        (k) =>
+          `<span class="disk-legend-item"><span class="disk-legend-dot ${k}"></span>${GRADE_META[k].label} <b>${fmtSize(
+            g[k].size
+          )}</b> <span class="dl-count">${g[k].count} 处</span>${extra[k]}</span>`
+      )
+      .join('') + '<span class="disk-legend-item dl-sum">三档相加＝整块盘，不重不漏</span>';
+  }
+
+  renderDiskRecycle(res);
+  renderDiskGroups(res);
+}
+
+function renderDiskRecycle(res) {
+  const el = $('#diskRecycle');
+  if (!el) return;
+  const rb = res.recycleBin;
+  if (!rb || !rb.exists || !rb.size) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  const top = (rb.byExt || []).slice(0, 3)
+    .map((x) => `${esc(x.ext)} ${fmtSize(x.size)}`)
+    .join('　');
+  el.innerHTML = `
+    <div class="rb-main">
+      <div class="rb-title">回收站里还躺着 <span class="rb-num">${fmtSize(rb.size)}</span></div>
+      <div class="rb-note">${rb.files.toLocaleString()} 个文件已经被删掉了，但空间还没还给你——它们占的就是这块盘。${top ? `主要类型：${top}` : ''}</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="btnDiskOpenTrash" type="button">打开回收站自己看</button>`;
+  const btn = $('#btnDiskOpenTrash');
+  if (btn) btn.addEventListener('click', () => window.api.openTrash());
+}
+
+function renderDiskGroups(res) {
+  const box = $('#diskGroups');
+  if (!box) return;
+  const g = res.grades;
+  const root = String(res.root || '');
+  box.innerHTML = ['safe', 'careful', 'keep']
+    .map((k) => {
+      const bucket = g[k];
+      const meta = GRADE_META[k];
+      const open = diskState.open[k] ? ' open' : '';
+      const items = (bucket.items || []).filter((it) => it.size > 0);
+      const showAll = diskState.open['all-' + k];
+      const shown = showAll ? items : items.slice(0, 12);
+      const allPaths = items.map((it) => String(it.path));
+      const rows = shown
+        .map((it) => {
+          const full = String(it.path);
+          const rel = full.startsWith(root) ? full.slice(root.length) : full;
+          // 只剩下的"本级零散文件"：路径等于上级，写成「xx（本级零散文件）」才不会被误读成整个目录
+          const hasDeeper = allPaths.some((p) => p !== full && p.startsWith(full.endsWith('\\') ? full : full + '\\'));
+          const label = (rel || it.name || full).replace(/^\\+/, '');
+          const name = hasDeeper ? `${label}（本级零散文件）` : label;
+          return `<div class="disk-row">
+            <div class="dr-path">
+              <div class="dr-name">${esc(name || full)}</div>
+              <div class="dr-full" title="${esc(full)}">${esc(full)}</div>
+            </div>
+            <div class="dr-why" title="${esc(it.why || '')}">${esc(it.why || GRADE_META[k].head)}</div>
+            <div class="dr-size">${fmtSize(it.size)}</div>
+            <button class="btn btn-ghost btn-sm dr-btn" type="button" data-reveal="${esc(full)}">打开</button>
+          </div>`;
+        })
+        .join('');
+      const more =
+        items.length > 12 && !showAll
+          ? `<div class="disk-row-more">还有 ${items.length - 12} 处，合计 ${fmtSize(
+              items.slice(12).reduce((n, x) => n + x.size, 0)
+            )}　<button class="btn btn-ghost btn-sm" type="button" data-showall="${k}">全部展开</button></div>`
+          : '';
+      return `<div class="disk-group${open}" data-grade="${k}">
+        <div class="disk-group-head" data-toggle="${k}">
+          <span class="dg-dot ${k}"></span>
+          <span class="dg-name">${meta.label} · ${meta.head}</span>
+          <span class="dg-size">${fmtSize(bucket.size)}</span>
+          <span class="dg-count">${bucket.count} 处</span>
+          <span class="dg-caret">▶</span>
+        </div>
+        <div class="disk-group-body">
+          <div class="disk-group-note">${esc(meta.note)}</div>
+          ${rows || '<div class="disk-group-note">这一档没有东西。</div>'}
+          ${more}
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+/** 一句话解释为什么这个目录被归到这一档（理由由分类层给，界面不自己猜） */
+function whyOf(it, grade) {
+  if (it && it.why) return it.why;
+  return (GRADE_META[grade] && GRADE_META[grade].head) || '';
+}
+
+/** 体检结果导成 Markdown，给用户自己留档或转给别人看 */
+function buildDiskReport() {
+  const res = diskState.result;
+  if (!res || !res.grades) {
+    toast('还没有体检结果', true);
+    return '';
+  }
+  const g = res.grades;
+  const root = String(res.root || '');
+  const lines = [];
+  lines.push(`# 磁盘体检 · ${root.replace(/\\$/, '')} 盘`);
+  lines.push('');
+  lines.push(`- 日期：${new Date().toLocaleString('zh-CN')}`);
+  lines.push(`- 这块盘一共占用：${fmtSize(res.totalSize)}（${(res.totalFiles || 0).toLocaleString()} 个文件）`);
+  if (res.recycleBin && res.recycleBin.exists && res.recycleBin.size) {
+    lines.push(`- 回收站里还压着：${fmtSize(res.recycleBin.size)}（${res.recycleBin.files.toLocaleString()} 个已删文件）`);
+  }
+  lines.push('');
+  lines.push('## 三档汇总');
+  lines.push('');
+  lines.push('| 档位 | 体积 | 目录数 | 含义 |');
+  lines.push('| --- | --- | --- | --- |');
+  for (const k of ['safe', 'careful', 'keep']) {
+    lines.push(`| ${GRADE_META[k].label} | ${fmtSize(g[k].size)} | ${g[k].count} | ${GRADE_META[k].head} |`);
+  }
+  lines.push('');
+  lines.push('三档相加正好等于整块盘的占用，没有重复计算。');
+  for (const k of ['safe', 'careful', 'keep']) {
+    const items = (g[k].items || []).filter((it) => it.size > 0).slice(0, 30);
+    if (!items.length) continue;
+    lines.push('');
+    lines.push(`## ${GRADE_META[k].label}（${fmtSize(g[k].size)}）`);
+    lines.push('');
+    lines.push(GRADE_META[k].note);
+    lines.push('');
+    for (const it of items) {
+      lines.push(`- \`${it.path}\`　${fmtSize(it.size)}　${whyOf(it, k)}`);
+    }
+    const rest = (g[k].items || []).filter((it) => it.size > 0).length - items.length;
+    if (rest > 0) lines.push(`- ……另有 ${rest} 处未列出`);
+  }
+  lines.push('');
+  lines.push('---');
+  lines.push('由 AI产出管家 生成 · 智维工作室 Zhiwei Studio · www.zhiweistudio.com.cn');
+  return lines.join('\n');
 }
 
 /* ---------------- 启动 ---------------- */
