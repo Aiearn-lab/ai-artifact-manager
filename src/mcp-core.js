@@ -67,7 +67,7 @@ function describe(f) {
 }
 
 // ---- 磁盘体检结果的 AI 可读格式化 ----
-const GRADE_NAME = { safe: '能安全清掉', careful: '占地大户', keep: '不用管' };
+const GRADE_NAME = { safe: '能安全清掉', careful: '占地方的大件', keep: '不用管' };
 
 function fmtTime(ts) {
   const d = new Date(Number(ts) || Date.now());
@@ -108,7 +108,7 @@ function formatDiskStatus(s) {
     '「能安全清掉」明细（前 20 条）：',
     formatItems(g.safe && g.safe.items, 20),
     '',
-    '「占地大户」明细（前 20 条，不给清理建议，只帮定位）：',
+    '「占地方的大件」明细（前 20 条，不给清理建议，只帮定位）：',
     formatItems(g.careful && g.careful.items, 20),
     '',
     '下一步：想看某块目录里到底是什么，用 disk_peek；想清理，用 disk_cleanup（默认只预演，不会直接删）。'
@@ -226,7 +226,7 @@ const TOOLS = [
   },
   {
     name: 'disk_status',
-    description: '读取当前磁盘体检结果：整盘占用、「能安全清掉 / 占地大户 / 不用管」三档各占多少、具体有哪些目录、回收站压了多少空间。这是磁盘类任务的推荐第一步——用户通常已经在软件里点过体检。只读，一个文件都不动。',
+    description: '读取当前磁盘体检结果：整盘占用、「能安全清掉 / 占地方的大件 / 不用管」三档各占多少、具体有哪些目录、回收站压了多少空间。这是磁盘类任务的推荐第一步——用户通常已经在软件里点过体检。只读，一个文件都不动。',
     inputSchema: { type: 'object', properties: {} },
     annotations: {
       readOnlyHint: true,
