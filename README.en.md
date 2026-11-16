@@ -1,11 +1,11 @@
 <div align="center">
   <img src="assets/icon.png" width="96" alt="AI Artifact Manager">
   <h1>AI Artifact Manager</h1>
-  <p><b>Find what AI tools left on your disk, sort it, and see what's safe to delete</b></p>
+  <p><b>See why your disk is full first — then sort out what AI tools left behind</b></p>
   <p>
     <img alt="MIT" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-0.8.2-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-0.9.0-6366f1">
     <img alt="no cloud" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p>
@@ -19,6 +19,8 @@ If you work with ChatGPT, Claude, DeepSeek or Cursor, your disk fills up with `u
 
 ![Main window](docs/screenshots/en/main.png)
 
+![Disk checkup: what ate this drive — three tiers that add up exactly](docs/screenshots/disk.png)
+
 ## Download
 
 **[⬇ Latest release (Windows 64-bit, ~95 MB)](https://github.com/Aiearn-lab/ai-artifact-manager/releases/latest)** — portable, unzip and double-click. No installer, no account, no Node required.
@@ -27,14 +29,15 @@ First launch may show Windows' "protected your PC" screen — that's because we 
 
 Or run from source (bottom of this page).
 
-## Three steps (v0.8 out-of-the-box flow)
+## Three steps (v0.9: see first, touch later)
 
-1. **It scans on first launch** — the butler walks the whole PC right away; broad scanning is safe because protection comes from hard exclusions and full reversibility, not from narrowing the scan
-2. **Click Slim-down** — work is laid out in three tiers by confidence; you only nod where a nod is needed
+1. **Start with Disk checkup** — it's the first tab. One click measures the drive in a few seconds and splits it into three tiers: **safe to clear / big blocks / hands off**. The three numbers add up exactly to the drive's real usage, so you can see at a glance what the biggest item is and where it lives — "Open" jumps straight to that folder
+2. **Then AI files** — the butler walks the whole PC on first launch; broad scanning is safe because protection comes from hard exclusions and full reversibility, not from narrowing the scan. When you're ready to act, Slim-down lays the work out in three tiers by confidence
 3. **Stash box & Monthly note** — anything tucked away can be put back anytime; the note page shows what the butler did this month
 
 ## What it does
 
+- **Disk checkup (new in v0.9)** — measures sizes only, touches nothing, and answers "why is my drive full". Each drive is split into three tiers: **safe to clear** (caches, dependencies, build output — reinstall or rebuild and it's back), **big blocks** (the largest items; the tool refuses to judge whether they're deletable and just points you at them with a one-click "Open"), and **hands off** (system, programs, game data, photos, source). The tiers add up **exactly** to the drive's usage, and whatever the recycle bin is still holding is reported too. The scan can be stopped at any time
 - **Scan** the whole PC on install, or pick a folder. System folders, program folders and known AI-tool cache directories (.accio, Coze, .qoder…) are skipped by default
 - **Detect AI output** by filename patterns, header comments and export formats. Exactly two labels: **AI tool / Unknown** — guessing a wrong vendor name costs more trust than not guessing at all
 - **Categorize**: Knowledge / Reusable script / One-off script / Disposable, each with a one-line reason
