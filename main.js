@@ -336,7 +336,15 @@ async function computeDigest() {
       (b && Array.isArray(b.files) ? b.files : []).map((x) => ({ at: b.at, size: x.size || 0 }))
     )
   });
-  return { week, month, trayLine: digest.trayLine(week), monthLine: digest.monthLine(month) };
+  return {
+    week,
+    month,
+    // 中英各出一份，渲染层按当前语言挑，主进程不用猜
+    trayLine: digest.trayLine(week, { zh: true }),
+    trayLineEn: digest.trayLine(week, { zh: false }),
+    monthLine: digest.monthLine(month, { zh: true }),
+    monthLineEn: digest.monthLine(month, { zh: false })
+  };
 }
 
 /** 托盘 tooltip 刷成最新一句话；没托盘就什么都不做 */
@@ -344,7 +352,14 @@ async function refreshTray() {
   if (!tray) return;
   try {
     const d = await computeDigest();
-    tray.setToolTip(d.trayLine);
+    // 托盘跟界面语言走，否则英文界面配中文 tooltip 会露馅
+    let zh = true;
+    try {
+      zh = !(configStore && configStore.get().ui && configStore.get().ui.lang === 'en');
+    } catch {
+      /* 读不到就当中文 */
+    }
+    tray.setToolTip(zh ? d.trayLine : d.trayLineEn);
   } catch {
     /* 刷不动就留着上一句 */
   }
