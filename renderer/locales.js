@@ -480,6 +480,169 @@ window.I18N = {
     'common.close': 'Close',
     'common.save': 'Save',
     'common.refresh': 'Refresh',
-    'common.gotIt': 'Got it'
+    'common.gotIt': 'Got it',
+
+    /* ---- 以下以中文原文为键：HTML 里 data-i18n 直接写中文，查不到就用原文兜底 ---- */
+    '专门管理 AI 生成的文件': 'Manages the files AI tools generate',
+    '一键瘦身': 'Slim down',
+    '三档处理：重复的直接删、多版本的你点头、拿不准的只收起来':
+      'Three levels of care: exact duplicates go straight out, version groups wait for your OK, anything uncertain is only stashed',
+    '设置': 'Settings',
+    '查看统计图表': 'View stats',
+    '还没有扫描': 'Not scanned yet',
+    '你的盘被什么吃掉了': "What's eating your drive",
+    '只看不改。体检只统计体积，一个文件都不动。':
+      'Look, never touch. A checkup only measures sizes — not a single file is modified.',
+    '第 1 步': 'Step 1',
+    '先点下面任意一块盘，再点「开始体检」': 'Pick any drive below, then hit Start checkup',
+    '它会告诉你这块盘被什么占满了、其中有多少能放心清掉。只数不动，看多久都行。':
+      'It shows what filled the drive up and how much of it is safe to clear. Counting only — take as long as you like.',
+    '知道了': 'Got it',
+    '正在读取磁盘…': 'Reading drives…',
+    '开始体检': 'Start checkup',
+    '先点上面一块盘': 'Pick a drive above',
+    '三档是什么意思？（点开看）': 'What do the three tiers mean? (click to expand)',
+    '体检完你会看到三档，相加正好等于整块盘——不会出现「这个也说能删、那个也说能删，加一起比盘还大」。':
+      'After a checkup you get three tiers that add up exactly to the drive — no "this is deletable and that is deletable" adding up to more than the disk holds.',
+    '<b>能安全清掉</b>——缓存、临时文件、编译中间产物。删了要么自动重建、要么无感，这一档我们敢给你数字。程序自己的零件（依赖包、虚拟环境）不算在这里，删了程序就跑不起来。':
+      '<b>Safe to clear</b> — caches, temp files, build output. They either rebuild themselves or nothing changes. This is the one tier we put a number on. An app\'s own parts (dependency packages, virtual environments) are excluded, because removing them breaks the app.',
+    '<b>占地方的大件</b>——块头最大的那些。可能是你留的游戏、聊天记录里的文件、下载的素材，也可能是你自己的存档。我们<b>不给这一档任何清理建议</b>，只帮你定位到「哪里最大」，点「打开」看一眼你就明白了。':
+      '<b>Big items</b> — the largest blocks. They might be a game you keep, files from chat history, downloaded assets, or your own archives. We give <b>no cleanup advice for this tier</b>; we only show you where the size is. Click Open and you will know at a glance.',
+    '<b>不用管</b>——系统、程序、游戏本体、照片、源码。动了会出事，一律不碰。':
+      '<b>Hands off</b> — system files, programs, game installs, photos, source code. Touching them breaks things, so we never do.',
+    '把这份体检结果存成文件': 'Save this checkup as a file',
+    '体检结果只存在你自己电脑上，不会上传到任何地方。':
+      'The result stays on your own computer — it is never uploaded anywhere.',
+    '想让 AI 替你看盘？': 'Want AI to look at your drive for you?',
+    '开了 MCP 后，对 Cursor / Claude 说「我的盘为什么满」，它会先看清三档、再给你清单——你点头才删。':
+      'With MCP on, just tell Cursor / Claude "why is my disk full". It reads the three tiers first and shows you a list — nothing is deleted until you say yes.',
+    '让 AI 接手': 'Let AI take over',
+    '先点上面「扫描整个电脑」，再看看「一键瘦身」':
+      'Click "Scan whole computer" above, then take a look at "Slim down"',
+    '小报': 'Monthly note',
+    '这个月管家帮你收了多少，一眼看清': 'What this month looked like, at a glance',
+    '回收箱': 'Recycle box',
+    '被收起来的 AI 文件都在这里，随时放回': 'AI files that were stashed live here — restore them anytime',
+    '撤销整理': 'Undo tidy',
+    '把最近一次整理挪走的文件整批搬回原位置': 'Move the files from the last tidy run back where they came from',
+    '先让管家看看你的电脑': 'Let the tool look at your computer first',
+    '只读不改：扫描只是看看有哪些 AI 产出的文件，不会动你的东西。':
+      'Read-only: a scan just lists which files AI tools produced. Nothing of yours is touched.',
+    '帮我扫一扫': 'Scan for me',
+    '「帮我扫一扫」会把电脑里 AI 工具产出的文件找出来列好——只看不改，随时能停。':
+      '"Scan for me" finds the files AI tools produced and lists them — read-only, and you can stop anytime.',
+    '这是我写的': 'I wrote this',
+    '标记后，管家任何自动整理都不会碰它': 'Once marked, nothing automatic will ever touch it',
+    'AI 批量建议': 'AI batch advice',
+    'AI 只给建议，不会动任何文件；没配 AI 时不显示':
+      'AI only advises, it never touches files; hidden when no AI is configured',
+    '就绪': 'Ready',
+    '要扫哪里？': 'Where should I scan?',
+    '关闭': 'Close',
+    '点一个磁盘，管家会把它里面的 AI 文件找出来。系统目录、程序目录会自动跳过。':
+      'Pick a drive and the tool will find the AI files on it. System and program folders are skipped automatically.',
+    '只扫一个文件夹': 'Scan a single folder',
+    '全盘扫描可能需要几分钟，文件多的时候请耐心等一会儿。':
+      'A whole-drive scan can take a few minutes — please be patient when there are many files.',
+    '还没扫': 'Not scanned',
+    '扫描后显示': 'Shown after a scan',
+    '保存设置': 'Save settings',
+    '一键连本地 AI': 'Connect to local AI in one click',
+    '免费 · 不用密钥': 'Free · no API key',
+    '电脑上开着 Ollama 或 LM Studio 并加载了模型，点一下就能用。我们不提供算力，也不收你的 API 费用。':
+      'If Ollama or LM Studio is running with a model loaded, one click connects you. We do not provide compute and never charge for API usage.',
+    '一键检测本地 AI': 'Detect local AI',
+    '还没检测': 'Not checked',
+    '用自己的 API（OpenAI 兼容）': 'Use your own API (OpenAI-compatible)',
+    '接口地址': 'Endpoint URL',
+    '例如 https://api.deepseek.com/v1 或 http://127.0.0.1:11434/v1':
+      'e.g. https://api.deepseek.com/v1 or http://127.0.0.1:11434/v1',
+    'API 密钥': 'API key',
+    'sk-...（只存本机）': 'sk-... (stored locally only)',
+    '模型名': 'Model name',
+    '例如 deepseek-chat': 'e.g. deepseek-chat',
+    '密钥只写进你本机的配置文件，不会上传到任何服务器，也不会写进导出的清单。':
+      'The key is written to your local config file only. It is never uploaded and never included in exports.',
+    '保存 AI 配置': 'Save AI settings',
+    '测试连接': 'Test connection',
+    'AI 能帮你做什么': 'What AI can do for you',
+    '把 <code>untitled.md</code> 这种乱名字改成「类型_主题_日期」':
+      'Rename junk like <code>untitled.md</code> to "type_topic_date"',
+    '给每个文件一句大白话摘要，判断该不该留': 'One plain-language summary per file, so you can decide what to keep',
+    '自动打标签，以后按标签筛': 'Tag files automatically, filter by tag later',
+    '复核纯规则的分类，减少误判': 'Re-check rule-based categories to cut mistakes',
+    '两个相似版本比一比，告诉你留哪份': 'Compare two similar versions and tell you which to keep',
+    '让 AI 帮你管这台电脑': 'Let AI manage this computer for you',
+    '未启动': 'Not started',
+    '开启后，你可以直接对 Cursor、Claude 说「我的盘为什么满」「帮我清掉缓存」。AI 先给清单，你点头才删。服务只监听 127.0.0.1，不对局域网开放。':
+      'Once enabled you can just tell Cursor or Claude "why is my disk full" or "clear the caches". The AI shows a list first; nothing is deleted until you agree. The service listens on 127.0.0.1 only and is never exposed to the network.',
+    '开启 MCP': 'Start MCP',
+    '第一步：复制配置，粘到 AI 工具里': 'Step 1: copy the config into your AI tool',
+    'Cursor：设置 → MCP → 添加服务器，粘贴下面的配置。':
+      'In Cursor: Settings → MCP → Add server, then paste the config below.',
+    '开启 MCP 后显示配置': 'Config appears once MCP is started',
+    '复制': 'Copy',
+    '第二步：复制一句话，直接对 AI 说': 'Step 2: copy one sentence and say it to the AI',
+    '把这句话发给你的 AI 助手，它就知道怎么接手了。':
+      'Send this sentence to your AI assistant and it will know how to take over.',
+    '我的盘快满了。先用 AI产出管家 的 disk_status 看看三档各占多少；对「占地方的大件」用 disk_peek 一层层查清是什么；然后把「能安全清掉」的清单给我确认——在我点头之前别删任何东西。':
+      'My drive is almost full. Start with AI Artifact Manager\'s disk_status to see how the three tiers divide up. Use disk_peek on the "Big items" tier to find out what is inside, layer by layer. Then show me the "Safe to clear" list for approval — do not delete anything until I say yes.',
+    'AI 拿到这些能力': 'What the AI gets',
+    '<code>disk_status</code> / <code>disk_scan</code> — 读体检结果、触发体检':
+      '<code>disk_status</code> / <code>disk_scan</code> — read results, run a checkup',
+    '<code>disk_peek</code> — 逐层查看大目录里是什么':
+      '<code>disk_peek</code> — walk into a big folder layer by layer',
+    '<code>disk_cleanup</code> — 清缓存/构建产物（先给清单，确认后才删，进回收站）':
+      '<code>disk_cleanup</code> — clear caches and build output (list first, delete only after approval, straight to the Recycle Bin)',
+    '<code>search_files</code> / <code>get_file_summary</code> / <code>list_by_category</code> / <code>archive_files</code> — 整理 AI 文件':
+      '<code>search_files</code> / <code>get_file_summary</code> / <code>list_by_category</code> / <code>archive_files</code> — organise AI files',
+    '依赖包、虚拟环境、系统目录、程序数据、第一层大目录都不会被自动清。完整说明见仓库里的 AI-SKILL.md。':
+      'Dependency packages, virtual environments, system folders, program data and top-level folders are never cleared automatically. Full details in AI-SKILL.md in the repo.',
+    '出品方': 'Made by',
+    '官网': 'Website',
+    '遥测': 'Telemetry',
+    '零上报（可在防火墙里验证）': 'None (verifiable in your firewall)',
+    '联系邮箱': 'Email',
+    '专门管理 AI 产出文件的本地工具。全程免费，零遥测：不联网上报、不统计使用情况，连「你清了多少个文件」这种数字都只存在你自己的电脑上。':
+      'A local tool for the files AI tools produce. Completely free, zero telemetry: no reporting, no usage tracking — even "how many files you cleared" stays on your machine.',
+    '我们承接 AI 应用、桌面工具、自动化脚本的定制开发。如果你有类似需求，欢迎从官网或邮箱找到我们。':
+      'We build custom AI apps, desktop tools and automation. If you need something similar, reach us through the website or email.',
+    'AI产出管家 不提供 AI 算力、不代付 API 费用；所有 AI 能力由你自带（本地模型或自己的密钥）。所有数据只存在你的电脑上。':
+      'AI Artifact Manager does not provide AI compute and does not pay for API usage; all AI features run on what you bring (a local model or your own key). All data stays on your computer.',
+    '访问官网': 'Visit website',
+    '清理记录': 'Cleanup log',
+    '管家删掉的文件，全部进了 <b>Windows 回收站</b>，没有真删。<br>想找回：打开回收站，找到文件右键点「还原」，就回到原来的位置。':
+      'Every file this tool removed went to the <b>Windows Recycle Bin</b> — nothing was permanently deleted.<br>To get one back: open the Recycle Bin, right-click the file and choose Restore.',
+    '打开 Windows 回收站': 'Open the Windows Recycle Bin',
+    '清空这份记录': 'Clear this log',
+    '一键瘦身（还没动任何文件）': 'Slim down (nothing touched yet)',
+    '先看清楚，没点头的版本组不会动。': 'Read it first — version groups you have not approved stay put.',
+    '打开回收箱': 'Open recycle box',
+    '开始处理': 'Start',
+    '回收箱（这里的东西不会自动删）': 'Recycle box (nothing here is ever deleted automatically)',
+    '放回＝搬回原位置；清空才进系统回收站。':
+      'Restore = move it back where it was. Only emptying sends it to the Windows Recycle Bin.',
+    '全部放回': 'Restore all',
+    '清空（进系统回收站）': 'Empty (to Recycle Bin)',
+    '整理预案（预演）': 'Tidy plan (dry run)',
+    '现在是预演：只看清单，不动任何文件。': 'This is a dry run: you only see the list, nothing is touched.',
+    '按这份清单执行': 'Run this list',
+    '清掉这一档（还没动任何文件）': 'Clear this tier (nothing touched yet)',
+    '没点「确认清掉」之前，一个文件夹都不会动。': 'Not one folder is touched until you confirm.',
+    '确认清掉': 'Confirm clear',
+    '里面装的是什么': "What's inside",
+    '这里显示的是这一层里最占地方的 10 项，不代表其他东西不重要。':
+      'These are the 10 largest items at this level — it does not mean the rest is unimportant.',
+    '在文件夹里打开': 'Show in folder',
+    '管家小报': 'Monthly note',
+    '这些文件想变成能查的知识库？或者有人帮你把脚本改造成顺手的工具？':
+      'Want these files turned into a searchable knowledge base? Or someone to turn your scripts into proper tools?',
+    '去智维工作室官网说说需求': 'Tell us on the Zhiwei Studio website',
+    '以上数字只存在你这台电脑上，管家不往任何地方上报。':
+      'These numbers exist only on this computer — nothing is ever reported anywhere.',
+    '智维工作室 · Zhiwei Studio': 'Zhiwei Studio',
+    '智维工作室 · zhiweistudio.com.cn': 'Zhiwei Studio · zhiweistudio.com.cn',
+    '界面语言': 'Interface language',
+    '切换后界面立刻变，不用重启。': 'Switches immediately — no restart needed.'
   }
 };
