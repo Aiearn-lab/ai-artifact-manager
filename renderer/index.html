@@ -12,8 +12,8 @@
   <div class="splash" id="splash">
     <div class="splash-mark">AI</div>
     <h1 data-i18n="app.name">AI产出管家</h1>
-    <p class="splash-sub">专门管理 AI 生成的文件</p>
-    <p class="splash-brand">智维工作室 · Zhiwei Studio</p>
+    <p class="splash-sub" data-i18n="专门管理 AI 生成的文件">专门管理 AI 生成的文件</p>
+    <p class="splash-brand" data-i18n="智维工作室 · Zhiwei Studio">智维工作室 · Zhiwei Studio</p>
     <p class="splash-url">www.zhiweistudio.com.cn</p>
   </div>
   <div class="app">
@@ -40,10 +40,10 @@
 
       <div class="scan-actions">
         <button id="btnScanScope" class="btn btn-primary btn-lg" type="button" data-i18n="nav.scanAll">扫描整个电脑</button>
-        <button id="btnSlim" class="btn btn-primary btn-lg" type="button" title="三档处理：重复的直接删、多版本的你点头、拿不准的只收起来">一键瘦身</button>
+        <button id="btnSlim" class="btn btn-primary btn-lg" type="button" data-i18n="一键瘦身" data-i18n-title="三档处理：重复的直接删、多版本的你点头、拿不准的只收起来">一键瘦身</button>
       </div>
 
-      <button id="btnSettings" class="icon-btn" type="button" title="设置">
+      <button id="btnSettings" class="icon-btn" type="button" data-i18n-title="设置" title="设置">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
           <circle cx="12" cy="12" r="3.2"/>
           <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>
@@ -59,8 +59,8 @@
         <button class="nav-tab" data-view="tools" type="button" data-i18n="view.tools">能用的工具</button>
         <button class="nav-tab" data-view="duplicates" type="button" data-i18n="view.duplicates">重复的文件</button>
       </div>
-      <button class="nav-stats" id="btnStats" type="button" title="查看统计图表">
-        <span id="navStats">还没有扫描</span>
+      <button class="nav-stats" id="btnStats" type="button" data-i18n-title="查看统计图表" title="查看统计图表">
+        <span id="navStats" data-i18n="还没有扫描">还没有扫描</span>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
       </button>
     </nav>
@@ -70,39 +70,39 @@
       <section class="disk-panel" id="diskPanel">
         <div class="disk-head">
           <div class="disk-head-text">
-            <h2>你的盘被什么吃掉了</h2>
-            <p>只看不改。体检只统计体积，一个文件都不动。</p>
+            <h2 data-i18n="你的盘被什么吃掉了">你的盘被什么吃掉了</h2>
+            <p data-i18n="只看不改。体检只统计体积，一个文件都不动。">只看不改。体检只统计体积，一个文件都不动。</p>
           </div>
         </div>
 
         <div class="disk-first hidden" id="diskFirst">
-          <div class="df-num">第 1 步</div>
+          <div class="df-num" data-i18n="第 1 步">第 1 步</div>
           <div class="df-text">
-            <b>先点下面任意一块盘，再点「开始体检」</b>
-            <span>它会告诉你这块盘被什么占满了、其中有多少能放心清掉。只数不动，看多久都行。</span>
+            <b data-i18n="先点下面任意一块盘，再点「开始体检」">先点下面任意一块盘，再点「开始体检」</b>
+            <span data-i18n="它会告诉你这块盘被什么占满了、其中有多少能放心清掉。只数不动，看多久都行。">它会告诉你这块盘被什么占满了、其中有多少能放心清掉。只数不动，看多久都行。</span>
           </div>
-          <button id="btnDiskFirstOk" class="btn btn-ghost btn-sm" type="button">知道了</button>
+          <button id="btnDiskFirstOk" class="btn btn-ghost btn-sm" type="button" data-i18n="知道了">知道了</button>
         </div>
 
         <div class="disk-drives" id="diskDrives">
-          <div class="disk-drive-loading">正在读取磁盘…</div>
+          <div class="disk-drive-loading" data-i18n="正在读取磁盘…">正在读取磁盘…</div>
         </div>
 
         <!-- 体检按钮紧贴磁盘卡片下方、居中放大：视线看完盘卡片就能看到要做什么 -->
         <div class="disk-cta" id="diskCta">
-          <button id="btnDiskScan" class="btn btn-primary btn-xl" type="button" disabled>开始体检</button>
-          <span class="disk-pick-hint" id="diskPickHint">先点上面一块盘</span>
+          <button id="btnDiskScan" class="btn btn-primary btn-xl" type="button" disabled data-i18n="开始体检">开始体检</button>
+          <span class="disk-pick-hint" id="diskPickHint" data-i18n="先点上面一块盘">先点上面一块盘</span>
         </div>
 
         <div class="disk-idle" id="diskIdle">
           <details class="disk-why">
-            <summary>三档是什么意思？（点开看）</summary>
+            <summary data-i18n="三档是什么意思？（点开看）">三档是什么意思？（点开看）</summary>
             <div class="disk-why-body">
-              <p>体检完你会看到三档，相加正好等于整块盘——不会出现「这个也说能删、那个也说能删，加一起比盘还大」。</p>
+              <p data-i18n="体检完你会看到三档，相加正好等于整块盘——不会出现「这个也说能删、那个也说能删，加一起比盘还大」。">体检完你会看到三档，相加正好等于整块盘——不会出现「这个也说能删、那个也说能删，加一起比盘还大」。</p>
               <ul class="disk-idle-list">
-                <li><b>能安全清掉</b>——缓存、临时文件、编译中间产物。删了要么自动重建、要么无感，这一档我们敢给你数字。程序自己的零件（依赖包、虚拟环境）不算在这里，删了程序就跑不起来。</li>
-                <li><b>占地方的大件</b>——块头最大的那些。可能是你留的游戏、聊天记录里的文件、下载的素材，也可能是你自己的存档。我们<b>不给这一档任何清理建议</b>，只帮你定位到"哪里最大"，点「打开」看一眼你就明白了。</li>
-                <li><b>不用管</b>——系统、程序、游戏本体、照片、源码。动了会出事，一律不碰。</li>
+                <li data-i18n-html="<b>能安全清掉</b>——缓存、临时文件、编译中间产物。删了要么自动重建、要么无感，这一档我们敢给你数字。程序自己的零件（依赖包、虚拟环境）不算在这里，删了程序就跑不起来。"><b>能安全清掉</b>——缓存、临时文件、编译中间产物。删了要么自动重建、要么无感，这一档我们敢给你数字。程序自己的零件（依赖包、虚拟环境）不算在这里，删了程序就跑不起来。</li>
+                <li data-i18n-html="<b>占地方的大件</b>——块头最大的那些。可能是你留的游戏、聊天记录里的文件、下载的素材，也可能是你自己的存档。我们<b>不给这一档任何清理建议</b>，只帮你定位到「哪里最大」，点「打开」看一眼你就明白了。"><b>占地方的大件</b>——块头最大的那些。可能是你留的游戏、聊天记录里的文件、下载的素材，也可能是你自己的存档。我们<b>不给这一档任何清理建议</b>，只帮你定位到「哪里最大」，点「打开」看一眼你就明白了。</li>
+                <li data-i18n-html="<b>不用管</b>——系统、程序、游戏本体、照片、源码。动了会出事，一律不碰。"><b>不用管</b>——系统、程序、游戏本体、照片、源码。动了会出事，一律不碰。</li>
               </ul>
             </div>
           </details>
@@ -116,8 +116,8 @@
           <div class="disk-recycle hidden" id="diskRecycle"></div>
           <div class="disk-groups" id="diskGroups"></div>
           <div class="disk-foot">
-            <button id="btnDiskOpenReport" class="btn btn-ghost btn-sm" type="button">把这份体检结果存成文件</button>
-            <span class="disk-foot-note">体检结果只存在你自己电脑上，不会上传到任何地方。</span>
+            <button id="btnDiskOpenReport" class="btn btn-ghost btn-sm" type="button" data-i18n="把这份体检结果存成文件">把这份体检结果存成文件</button>
+            <span class="disk-foot-note" data-i18n="体检结果只存在你自己电脑上，不会上传到任何地方。">体检结果只存在你自己电脑上，不会上传到任何地方。</span>
           </div>
         </div>
 
@@ -125,15 +125,15 @@
         <div class="disk-ai-banner" id="diskAiBanner">
           <div class="dab-mark">AI</div>
           <div class="dab-text">
-            <b>想让 AI 替你看盘？</b>
-            <span>开了 MCP 后，对 Cursor / Claude 说「我的盘为什么满」，它会先看清三档、再给你清单——你点头才删。</span>
+            <b data-i18n="想让 AI 替你看盘？">想让 AI 替你看盘？</b>
+            <span data-i18n="开了 MCP 后，对 Cursor / Claude 说「我的盘为什么满」，它会先看清三档、再给你清单——你点头才删。">开了 MCP 后，对 Cursor / Claude 说「我的盘为什么满」，它会先看清三档、再给你清单——你点头才删。</span>
           </div>
-          <button id="btnDiskAiSetup" class="btn btn-ghost btn-sm" type="button">让 AI 接手</button>
+          <button id="btnDiskAiSetup" class="btn btn-ghost btn-sm" type="button" data-i18n="让 AI 接手">让 AI 接手</button>
         </div>
       </section>
 
       <section class="list-panel hidden" id="listPanel">
-        <div class="view-summary" id="viewSummary">先点上面「扫描整个电脑」，再看看「一键瘦身」</div>
+        <div class="view-summary" id="viewSummary" data-i18n="先点上面「扫描整个电脑」，再看看「一键瘦身」">先点上面「扫描整个电脑」，再看看「一键瘦身」</div>
 
         <div class="onboard hidden" id="onboardTip">
           <div class="ob-steps">
@@ -154,8 +154,8 @@
           </div>
           <div class="bulk-actions">
             <label class="check-inline"><input type="checkbox" id="selectAll"> <span data-i18n="tb.selectAll">全选</span></label>
-            <button id="btnOpenDigest" class="btn btn-ghost btn-sm" type="button" title="这个月管家帮你收了多少，一眼看清">小报</button>
-            <button id="btnOpenStash" class="btn btn-ghost btn-sm" type="button" title="被收起来的 AI 文件都在这里，随时放回">回收箱</button>
+            <button id="btnOpenDigest" class="btn btn-ghost btn-sm" type="button" data-i18n="小报" data-i18n-title="这个月管家帮你收了多少，一眼看清">小报</button>
+            <button id="btnOpenStash" class="btn btn-ghost btn-sm" type="button" data-i18n="回收箱" data-i18n-title="被收起来的 AI 文件都在这里，随时放回">回收箱</button>
             <button id="btnOpenTrash" class="btn btn-ghost btn-sm" type="button" data-i18n="view.trashLog">清理记录</button>
           </div>
         </div>
@@ -177,7 +177,7 @@
             </select>
             <button id="btnOneClick" class="btn btn-primary btn-sm" type="button" data-i18n="tb.tidy">一键整理</button>
             <button id="btnArchive" class="btn btn-ghost btn-sm" type="button" data-i18n="tb.archive">归档</button>
-            <button id="btnUndoArchive" class="btn btn-ghost btn-sm" type="button" title="把最近一次整理挪走的文件整批搬回原位置">撤销整理</button>
+            <button id="btnUndoArchive" class="btn btn-ghost btn-sm" type="button" data-i18n="撤销整理" data-i18n-title="把最近一次整理挪走的文件整批搬回原位置">撤销整理</button>
             <button id="btnExport" class="btn btn-ghost btn-sm" type="button" data-i18n="tb.export">导出</button>
             <button id="btnCleanDup" class="btn btn-ghost btn-sm btn-danger-ghost" type="button" data-i18n="tb.cleanDup">清理重复</button>
           </div>
@@ -202,12 +202,12 @@
                 <path d="M22 36h20M22 43h13"/>
               </svg>
             </div>
-            <h3>先让管家看看你的电脑</h3>
-            <p>只读不改：扫描只是看看有哪些 AI 产出的文件，不会动你的东西。</p>
+            <h3 data-i18n="先让管家看看你的电脑">先让管家看看你的电脑</h3>
+            <p data-i18n="只读不改：扫描只是看看有哪些 AI 产出的文件，不会动你的东西。">只读不改：扫描只是看看有哪些 AI 产出的文件，不会动你的东西。</p>
             <div class="empty-actions">
-              <button id="btnEmptyScan" class="btn btn-primary btn-lg" type="button">帮我扫一扫</button>
+              <button id="btnEmptyScan" class="btn btn-primary btn-lg" type="button" data-i18n="帮我扫一扫">帮我扫一扫</button>
             </div>
-            <p class="empty-tip">「帮我扫一扫」会把电脑里 AI 工具产出的文件找出来列好——只看不改，随时能停。</p>
+            <p class="empty-tip" data-i18n="「帮我扫一扫」会把电脑里 AI 工具产出的文件找出来列好——只看不改，随时能停。">「帮我扫一扫」会把电脑里 AI 工具产出的文件找出来列好——只看不改，随时能停。</p>
           </div>
         </div>
       </section>
@@ -220,7 +220,7 @@
               <path d="M16 16h16M16 22h16M16 28h10"/>
             </svg>
           </div>
-          <p data-i18n="list.noPreview">点左边任意一个文件<br>这里能直接看内容，还能让 AI 帮你摘要、改名</p>
+          <p data-i18n-html="list.noPreview">点左边任意一个文件<br>这里能直接看内容，还能让 AI 帮你摘要、改名</p>
         </div>
 
         <div class="preview-content hidden" id="previewContent">
@@ -235,7 +235,7 @@
             <button id="btnPreviewOpen" class="btn btn-ghost btn-sm" type="button" data-i18n="act.open">用系统软件打开</button>
             <button id="btnPreviewReveal" class="btn btn-ghost btn-sm" type="button" data-i18n="act.reveal">在文件夹里找到它</button>
             <button id="btnPreviewArchive" class="btn btn-ghost btn-sm" type="button" data-i18n="act.archiveOne">单独整理这一个</button>
-            <button id="btnMarkMine" class="btn btn-ghost btn-sm" type="button" title="标记后，管家任何自动整理都不会碰它">这是我写的</button>
+            <button id="btnMarkMine" class="btn btn-ghost btn-sm" type="button" data-i18n="这是我写的" data-i18n-title="标记后，管家任何自动整理都不会碰它">这是我写的</button>
           </div>
 
           <div class="preview-meta" id="previewMeta"></div>
@@ -245,7 +245,7 @@
             <button id="btnAiRename" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiRename">AI 起名</button>
             <button id="btnAiTags" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiTags">AI 打标签</button>
             <button id="btnAiCategory" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="act.aiReview">AI 复核分类</button>
-            <button id="btnAiAdvise" class="btn btn-ghost btn-sm btn-ai" type="button" title="AI 只给建议，不会动任何文件；没配 AI 时不显示">AI 批量建议</button>
+            <button id="btnAiAdvise" class="btn btn-ghost btn-sm btn-ai" type="button" data-i18n="AI 批量建议" data-i18n-title="AI 只给建议，不会动任何文件；没配 AI 时不显示">AI 批量建议</button>
           </div>
 
           <div class="ai-result hidden" id="aiResult"></div>
@@ -258,9 +258,9 @@
     </main>
 
     <footer class="statusbar">
-      <span id="statusText">就绪</span>
+      <span id="statusText" data-i18n="就绪">就绪</span>
       <span class="status-right">
-        <a href="#" id="linkHomepage">智维工作室 · zhiweistudio.com.cn</a>
+        <a href="#" id="linkHomepage" data-i18n="智维工作室 · zhiweistudio.com.cn">智维工作室 · zhiweistudio.com.cn</a>
         <span class="dot">·</span>
         <span id="statusVersion">v0.7.0</span>
       </span>
@@ -273,16 +273,16 @@
   <div class="modal-mask hidden" id="diskModal">
     <div class="modal modal-sm">
       <header class="modal-head">
-        <h2>要扫哪里？</h2>
-        <button class="icon-btn" id="btnCloseDisk" type="button" title="关闭">×</button>
+        <h2 data-i18n="要扫哪里？">要扫哪里？</h2>
+        <button class="icon-btn" id="btnCloseDisk" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="disk-body">
-        <p class="hint">点一个磁盘，管家会把它里面的 AI 文件找出来。系统目录、程序目录会自动跳过。</p>
+        <p class="hint" data-i18n="点一个磁盘，管家会把它里面的 AI 文件找出来。系统目录、程序目录会自动跳过。">点一个磁盘，管家会把它里面的 AI 文件找出来。系统目录、程序目录会自动跳过。</p>
         <div class="disk-list" id="diskList">
-          <div class="disk-empty">正在读取磁盘…</div>
+          <div class="disk-empty" data-i18n="正在读取磁盘…">正在读取磁盘…</div>
         </div>
-        <button id="btnPickFolderFromModal" class="btn btn-ghost btn-lg btn-block" type="button">只扫一个文件夹</button>
-        <p class="hint">全盘扫描可能需要几分钟，文件多的时候请耐心等一会儿。</p>
+        <button id="btnPickFolderFromModal" class="btn btn-ghost btn-lg btn-block" type="button" data-i18n="只扫一个文件夹">只扫一个文件夹</button>
+        <p class="hint" data-i18n="全盘扫描可能需要几分钟，文件多的时候请耐心等一会儿。">全盘扫描可能需要几分钟，文件多的时候请耐心等一会儿。</p>
       </div>
     </div>
   </div>
@@ -292,7 +292,7 @@
     <div class="modal">
       <header class="modal-head">
         <h2 data-i18n="stats.title">统计</h2>
-        <button class="icon-btn" id="btnCloseStats" type="button" title="关闭">×</button>
+        <button class="icon-btn" id="btnCloseStats" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="stats-body">
         <div class="stat-cards">
@@ -314,17 +314,17 @@
           <div class="stat-card">
             <span class="stat-label" data-i18n="ov.dupFree">重复可释放</span>
             <strong class="stat-value accent-danger" id="statDuplicate">—</strong>
-            <span class="stat-note" id="statDuplicateNote">还没扫</span>
+            <span class="stat-note" id="statDuplicateNote" data-i18n="还没扫">还没扫</span>
           </div>
         </div>
         <div class="chart-row">
           <div class="chart-card">
             <div class="chart-head"><h3 data-i18n="stats.bySource">AI 工具占比</h3><span class="chart-sub" data-i18n="stats.byCount">按文件数</span></div>
-            <div class="chart-body" id="sourceChart"><div class="chart-empty">扫描后显示</div></div>
+            <div class="chart-body" id="sourceChart"><div class="chart-empty" data-i18n="扫描后显示">扫描后显示</div></div>
           </div>
           <div class="chart-card">
             <div class="chart-head"><h3 data-i18n="stats.byCategory">分类占比</h3><span class="chart-sub" data-i18n="stats.byCount">按文件数</span></div>
-            <div class="chart-body" id="categoryChart"><div class="chart-empty">扫描后显示</div></div>
+            <div class="chart-body" id="categoryChart"><div class="chart-empty" data-i18n="扫描后显示">扫描后显示</div></div>
           </div>
         </div>
       </div>
@@ -336,7 +336,7 @@
     <div class="modal">
       <header class="modal-head">
         <h2 data-i18n="set.title">设置</h2>
-        <button class="icon-btn" id="btnCloseSettings" type="button" title="关闭">×</button>
+        <button class="icon-btn" id="btnCloseSettings" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
 
       <nav class="settings-tabs" id="settingsTabs">
@@ -348,6 +348,17 @@
 
       <div class="settings-body">
         <section class="settings-panel active" data-panel="general">
+          <div class="field">
+            <label data-i18n="界面语言">界面语言</label>
+            <div class="field-row">
+              <select id="setLang">
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <p class="hint" data-i18n="切换后界面立刻变，不用重启。">切换后界面立刻变，不用重启。</p>
+          </div>
+
           <div class="field">
             <label data-i18n="set.archiveRoot">整理后的文件放哪里</label>
             <div class="field-row">
@@ -396,58 +407,58 @@
           </div>
 
           <div class="modal-actions">
-            <button id="btnSaveGeneral" class="btn btn-primary" type="button">保存设置</button>
+            <button id="btnSaveGeneral" class="btn btn-primary" type="button" data-i18n="保存设置">保存设置</button>
           </div>
         </section>
 
         <section class="settings-panel" data-panel="ai">
           <div class="ai-block">
             <div class="ai-block-head">
-              <h3>一键连本地 AI</h3>
-              <span class="pill pill-free">免费 · 不用密钥</span>
+              <h3 data-i18n="一键连本地 AI">一键连本地 AI</h3>
+              <span class="pill pill-free" data-i18n="免费 · 不用密钥">免费 · 不用密钥</span>
             </div>
-            <p class="hint">电脑上开着 Ollama 或 LM Studio 并加载了模型，点一下就能用。我们不提供算力，也不收你的 API 费用。</p>
+            <p class="hint" data-i18n="电脑上开着 Ollama 或 LM Studio 并加载了模型，点一下就能用。我们不提供算力，也不收你的 API 费用。">电脑上开着 Ollama 或 LM Studio 并加载了模型，点一下就能用。我们不提供算力，也不收你的 API 费用。</p>
             <div class="field-row">
-              <button id="btnDetectLocal" class="btn btn-ghost btn-sm" type="button">一键检测本地 AI</button>
-              <span class="inline-status" id="localAiStatus">还没检测</span>
+              <button id="btnDetectLocal" class="btn btn-ghost btn-sm" type="button" data-i18n="一键检测本地 AI">一键检测本地 AI</button>
+              <span class="inline-status" id="localAiStatus" data-i18n="还没检测">还没检测</span>
             </div>
             <div class="local-ai-list" id="localAiList"></div>
           </div>
 
           <div class="ai-block">
             <div class="ai-block-head">
-              <h3>用自己的 API（OpenAI 兼容）</h3>
+              <h3 data-i18n="用自己的 API（OpenAI 兼容）">用自己的 API（OpenAI 兼容）</h3>
             </div>
             <div class="field">
-              <label>接口地址</label>
-              <input id="setAiBaseUrl" type="text" placeholder="例如 https://api.deepseek.com/v1 或 http://127.0.0.1:11434/v1">
+              <label data-i18n="接口地址">接口地址</label>
+              <input id="setAiBaseUrl" type="text" data-i18n-ph="例如 https://api.deepseek.com/v1 或 http://127.0.0.1:11434/v1" placeholder="例如 https://api.deepseek.com/v1 或 http://127.0.0.1:11434/v1">
             </div>
             <div class="field-row two">
               <div class="field">
-                <label>API 密钥</label>
-                <input id="setAiKey" type="password" placeholder="sk-...（只存本机）">
+                <label data-i18n="API 密钥">API 密钥</label>
+                <input id="setAiKey" type="password" data-i18n-ph="sk-...（只存本机）" placeholder="sk-...（只存本机）">
               </div>
               <div class="field">
-                <label>模型名</label>
-                <input id="setAiModel" type="text" placeholder="例如 deepseek-chat">
+                <label data-i18n="模型名">模型名</label>
+                <input id="setAiModel" type="text" data-i18n-ph="例如 deepseek-chat" placeholder="例如 deepseek-chat">
               </div>
             </div>
-            <p class="hint">密钥只写进你本机的配置文件，不会上传到任何服务器，也不会写进导出的清单。</p>
+            <p class="hint" data-i18n="密钥只写进你本机的配置文件，不会上传到任何服务器，也不会写进导出的清单。">密钥只写进你本机的配置文件，不会上传到任何服务器，也不会写进导出的清单。</p>
             <div class="field-row">
-              <button id="btnSaveAi" class="btn btn-primary btn-sm" type="button">保存 AI 配置</button>
-              <button id="btnTestAi" class="btn btn-ghost btn-sm" type="button">测试连接</button>
+              <button id="btnSaveAi" class="btn btn-primary btn-sm" type="button" data-i18n="保存 AI 配置">保存 AI 配置</button>
+              <button id="btnTestAi" class="btn btn-ghost btn-sm" type="button" data-i18n="测试连接">测试连接</button>
               <span class="inline-status" id="aiTestStatus"></span>
             </div>
           </div>
 
           <div class="ai-block muted">
-            <h3>AI 能帮你做什么</h3>
+            <h3 data-i18n="AI 能帮你做什么">AI 能帮你做什么</h3>
             <ul class="plain-list">
-              <li>把 <code>untitled.md</code> 这种乱名字改成「类型_主题_日期」</li>
-              <li>给每个文件一句大白话摘要，判断该不该留</li>
-              <li>自动打标签，以后按标签筛</li>
-              <li>复核纯规则的分类，减少误判</li>
-              <li>两个相似版本比一比，告诉你留哪份</li>
+              <li data-i18n-html="把 <code>untitled.md</code> 这种乱名字改成「类型_主题_日期」">把 <code>untitled.md</code> 这种乱名字改成「类型_主题_日期」</li>
+              <li data-i18n="给每个文件一句大白话摘要，判断该不该留">给每个文件一句大白话摘要，判断该不该留</li>
+              <li data-i18n="自动打标签，以后按标签筛">自动打标签，以后按标签筛</li>
+              <li data-i18n="复核纯规则的分类，减少误判">复核纯规则的分类，减少误判</li>
+              <li data-i18n="两个相似版本比一比，告诉你留哪份">两个相似版本比一比，告诉你留哪份</li>
             </ul>
           </div>
         </section>
@@ -455,47 +466,47 @@
         <section class="settings-panel" data-panel="mcp">
           <div class="ai-block ai-hero">
             <div class="ai-block-head">
-              <h3>让 AI 帮你管这台电脑</h3>
-              <span class="inline-status" id="mcpStatus">未启动</span>
+              <h3 data-i18n="让 AI 帮你管这台电脑">让 AI 帮你管这台电脑</h3>
+              <span class="inline-status" id="mcpStatus" data-i18n="未启动">未启动</span>
             </div>
-            <p class="hint">开启后，你可以直接对 Cursor、Claude 说「我的盘为什么满」「帮我清掉缓存」。AI 先给清单，你点头才删。服务只监听 127.0.0.1，不对局域网开放。</p>
+            <p class="hint" data-i18n="开启后，你可以直接对 Cursor、Claude 说「我的盘为什么满」「帮我清掉缓存」。AI 先给清单，你点头才删。服务只监听 127.0.0.1，不对局域网开放。">开启后，你可以直接对 Cursor、Claude 说「我的盘为什么满」「帮我清掉缓存」。AI 先给清单，你点头才删。服务只监听 127.0.0.1，不对局域网开放。</p>
             <div class="field-row">
-              <button id="btnMcpToggle" class="btn btn-primary btn-sm" type="button">开启 MCP</button>
+              <button id="btnMcpToggle" class="btn btn-primary btn-sm" type="button" data-i18n="开启 MCP">开启 MCP</button>
               <span class="mcp-endpoint" id="mcpEndpoint">—</span>
             </div>
           </div>
 
           <div class="ai-block">
-            <h3>第一步：复制配置，粘到 AI 工具里</h3>
-            <p class="hint">Cursor：设置 → MCP → 添加服务器，粘贴下面的配置。</p>
+            <h3 data-i18n="第一步：复制配置，粘到 AI 工具里">第一步：复制配置，粘到 AI 工具里</h3>
+            <p class="hint" data-i18n="Cursor：设置 → MCP → 添加服务器，粘贴下面的配置。">Cursor：设置 → MCP → 添加服务器，粘贴下面的配置。</p>
             <div class="code-block">
-              <pre id="mcpConfigText">开启 MCP 后显示配置</pre>
-              <button id="btnCopyMcp" class="btn btn-ghost btn-sm" type="button">复制</button>
+              <pre id="mcpConfigText" data-i18n="开启 MCP 后显示配置">开启 MCP 后显示配置</pre>
+              <button id="btnCopyMcp" class="btn btn-ghost btn-sm" type="button" data-i18n="复制">复制</button>
             </div>
           </div>
 
           <div class="ai-block">
-            <h3>第二步：复制一句话，直接对 AI 说</h3>
-            <p class="hint">把这句话发给你的 AI 助手，它就知道怎么接手了。</p>
+            <h3 data-i18n="第二步：复制一句话，直接对 AI 说">第二步：复制一句话，直接对 AI 说</h3>
+            <p class="hint" data-i18n="把这句话发给你的 AI 助手，它就知道怎么接手了。">把这句话发给你的 AI 助手，它就知道怎么接手了。</p>
             <div class="code-block prompt-block">
-              <pre id="mcpPromptText">我的盘快满了。先用 AI产出管家 的 disk_status 看看三档各占多少；对「占地方的大件」用 disk_peek 一层层查清是什么；然后把「能安全清掉」的清单给我确认——在我点头之前别删任何东西。</pre>
-              <button id="btnCopyMcpPrompt" class="btn btn-ghost btn-sm" type="button">复制</button>
+              <pre id="mcpPromptText" data-i18n="我的盘快满了。先用 AI产出管家 的 disk_status 看看三档各占多少；对「占地方的大件」用 disk_peek 一层层查清是什么；然后把「能安全清掉」的清单给我确认——在我点头之前别删任何东西。">我的盘快满了。先用 AI产出管家 的 disk_status 看看三档各占多少；对「占地方的大件」用 disk_peek 一层层查清是什么；然后把「能安全清掉」的清单给我确认——在我点头之前别删任何东西。</pre>
+              <button id="btnCopyMcpPrompt" class="btn btn-ghost btn-sm" type="button" data-i18n="复制">复制</button>
             </div>
           </div>
 
           <div class="ai-block muted">
-            <h3>AI 拿到这些能力</h3>
+            <h3 data-i18n="AI 拿到这些能力">AI 拿到这些能力</h3>
             <ul class="plain-list">
-              <li><code>disk_status</code> / <code>disk_scan</code> — 读体检结果、触发体检</li>
-              <li><code>disk_peek</code> — 逐层查看大目录里是什么</li>
-              <li><code>disk_cleanup</code> — 清缓存/构建产物（先给清单，确认后才删，进回收站）</li>
-              <li><code>search_files</code> / <code>get_file_summary</code> / <code>list_by_category</code> / <code>archive_files</code> — 整理 AI 文件</li>
+              <li data-i18n-html="<code>disk_status</code> / <code>disk_scan</code> — 读体检结果、触发体检"><code>disk_status</code> / <code>disk_scan</code> — 读体检结果、触发体检</li>
+              <li data-i18n-html="<code>disk_peek</code> — 逐层查看大目录里是什么"><code>disk_peek</code> — 逐层查看大目录里是什么</li>
+              <li data-i18n-html="<code>disk_cleanup</code> — 清缓存/构建产物（先给清单，确认后才删，进回收站）"><code>disk_cleanup</code> — 清缓存/构建产物（先给清单，确认后才删，进回收站）</li>
+              <li data-i18n-html="<code>search_files</code> / <code>get_file_summary</code> / <code>list_by_category</code> / <code>archive_files</code> — 整理 AI 文件"><code>search_files</code> / <code>get_file_summary</code> / <code>list_by_category</code> / <code>archive_files</code> — 整理 AI 文件</li>
             </ul>
-            <p class="hint">依赖包、虚拟环境、系统目录、程序数据、第一层大目录都不会被自动清。完整说明见仓库里的 AI-SKILL.md。</p>
+            <p class="hint" data-i18n="依赖包、虚拟环境、系统目录、程序数据、第一层大目录都不会被自动清。完整说明见仓库里的 AI-SKILL.md。">依赖包、虚拟环境、系统目录、程序数据、第一层大目录都不会被自动清。完整说明见仓库里的 AI-SKILL.md。</p>
           </div>
 
           <div class="mcp-brandbar">
-            <span>智维工作室 · Zhiwei Studio</span>
+            <span data-i18n="智维工作室 · Zhiwei Studio">智维工作室 · Zhiwei Studio</span>
             <a href="#" id="mcpHomepage">www.zhiweistudio.com.cn</a>
           </div>
         </section>
@@ -509,31 +520,31 @@
                 <circle cx="31" cy="12" r="3.2" fill="#fbbf24"/>
               </svg>
             </div>
-            <h3>AI产出管家</h3>
-            <p class="about-version" id="aboutVersion">v1.0.0</p>
-            <p class="about-desc">专门管理 AI 产出文件的本地工具。全程免费，零遥测：不联网上报、不统计使用情况，连「你清了多少个文件」这种数字都只存在你自己的电脑上。</p>
+            <h3 data-i18n="app.name">AI产出管家</h3>
+            <p class="about-version" id="aboutVersion">v1.1.0</p>
+            <p class="about-desc" data-i18n="专门管理 AI 产出文件的本地工具。全程免费，零遥测：不联网上报、不统计使用情况，连「你清了多少个文件」这种数字都只存在你自己的电脑上。">专门管理 AI 产出文件的本地工具。全程免费，零遥测：不联网上报、不统计使用情况，连「你清了多少个文件」这种数字都只存在你自己的电脑上。</p>
           </div>
 
           <div class="about-grid">
-            <div><span>出品方</span><strong>智维工作室 · Zhiwei Studio</strong></div>
-            <div><span>官网</span><a href="#" id="aboutHomepage">www.zhiweistudio.com.cn</a></div>
-            <div><span>遥测</span><strong>零上报（可在防火墙里验证）</strong></div>
-            <div><span>联系邮箱</span><strong>7388603@qq.com</strong></div>
+            <div><span data-i18n="出品方">出品方</span><strong data-i18n="智维工作室 · Zhiwei Studio">智维工作室 · Zhiwei Studio</strong></div>
+            <div><span data-i18n="官网">官网</span><a href="#" id="aboutHomepage">www.zhiweistudio.com.cn</a></div>
+            <div><span data-i18n="遥测">遥测</span><strong data-i18n="零上报（可在防火墙里验证）">零上报（可在防火墙里验证）</strong></div>
+            <div><span data-i18n="联系邮箱">联系邮箱</span><strong>7388603@qq.com</strong></div>
           </div>
 
           <div class="about-note">
-            <p>我们承接 AI 应用、桌面工具、自动化脚本的定制开发。如果你有类似需求，欢迎从官网或邮箱找到我们。</p>
-            <p class="hint">AI产出管家 不提供 AI 算力、不代付 API 费用；所有 AI 能力由你自带（本地模型或自己的密钥）。所有数据只存在你的电脑上。</p>
+            <p data-i18n="我们承接 AI 应用、桌面工具、自动化脚本的定制开发。如果你有类似需求，欢迎从官网或邮箱找到我们。">我们承接 AI 应用、桌面工具、自动化脚本的定制开发。如果你有类似需求，欢迎从官网或邮箱找到我们。</p>
+            <p class="hint" data-i18n="AI产出管家 不提供 AI 算力、不代付 API 费用；所有 AI 能力由你自带（本地模型或自己的密钥）。所有数据只存在你的电脑上。">AI产出管家 不提供 AI 算力、不代付 API 费用；所有 AI 能力由你自带（本地模型或自己的密钥）。所有数据只存在你的电脑上。</p>
           </div>
 
           <div class="modal-actions">
-            <button id="btnOpenSite" class="btn btn-primary" type="button">访问官网</button>
+            <button id="btnOpenSite" class="btn btn-primary" type="button" data-i18n="访问官网">访问官网</button>
           </div>
         </section>
       </div>
 
       <div class="settings-brandbar">
-        <span class="sb-brand">智维工作室 · Zhiwei Studio</span>
+        <span class="sb-brand" data-i18n="智维工作室 · Zhiwei Studio">智维工作室 · Zhiwei Studio</span>
         <a href="#" id="settingsHomepage">www.zhiweistudio.com.cn</a>
         <span class="sb-note" data-i18n="brand.services">承接 AI 应用 / 桌面工具 / 自动化脚本定制</span>
       </div>
@@ -544,17 +555,17 @@
   <div class="modal-mask hidden" id="trashModal">
     <div class="modal">
       <header class="modal-head">
-        <h2>清理记录</h2>
-        <button class="icon-btn" id="btnCloseTrash" type="button" title="关闭">×</button>
+        <h2 data-i18n="清理记录">清理记录</h2>
+        <button class="icon-btn" id="btnCloseTrash" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
-      <div class="trash-note">
+      <div class="trash-note" data-i18n-html="管家删掉的文件，全部进了 <b>Windows 回收站</b>，没有真删。<br>想找回：打开回收站，找到文件右键点「还原」，就回到原来的位置。">
         管家删掉的文件，全部进了 <b>Windows 回收站</b>，没有真删。<br />
         想找回：打开回收站，找到文件右键点「还原」，就回到原来的位置。
       </div>
       <div class="trash-body" id="trashList"></div>
       <div class="trash-foot">
-        <button id="btnOpenTrashFolder" class="btn btn-primary btn-sm" type="button">打开 Windows 回收站</button>
-        <button id="btnClearTrashLog" class="btn btn-ghost btn-sm" type="button">清空这份记录</button>
+        <button id="btnOpenTrashFolder" class="btn btn-primary btn-sm" type="button" data-i18n="打开 Windows 回收站">打开 Windows 回收站</button>
+        <button id="btnClearTrashLog" class="btn btn-ghost btn-sm" type="button" data-i18n="清空这份记录">清空这份记录</button>
       </div>
     </div>
   </div>
@@ -564,16 +575,16 @@
   <div class="modal-mask hidden" id="slimModal">
     <div class="modal">
       <header class="modal-head">
-        <h2 id="slimTitle">一键瘦身（还没动任何文件）</h2>
-        <button class="icon-btn" id="btnCloseSlim" type="button" title="关闭">×</button>
+        <h2 id="slimTitle" data-i18n="一键瘦身（还没动任何文件）">一键瘦身（还没动任何文件）</h2>
+        <button class="icon-btn" id="btnCloseSlim" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="trash-note" id="slimNote"></div>
       <div class="tidy-body" id="slimBody"></div>
       <div class="trash-foot">
-        <span class="tidy-hint" id="slimHint">先看清楚，没点头的版本组不会动。</span>
-        <button id="btnStashOpen2" class="btn btn-ghost btn-sm" type="button">打开回收箱</button>
-        <button id="btnCloseSlim2" class="btn btn-ghost btn-sm" type="button">关闭</button>
-        <button id="btnSlimRun" class="btn btn-primary btn-sm" type="button">开始处理</button>
+        <span class="tidy-hint" id="slimHint" data-i18n="先看清楚，没点头的版本组不会动。">先看清楚，没点头的版本组不会动。</span>
+        <button id="btnStashOpen2" class="btn btn-ghost btn-sm" type="button" data-i18n="打开回收箱">打开回收箱</button>
+        <button id="btnCloseSlim2" class="btn btn-ghost btn-sm" type="button" data-i18n="关闭">关闭</button>
+        <button id="btnSlimRun" class="btn btn-primary btn-sm" type="button" data-i18n="开始处理">开始处理</button>
       </div>
     </div>
   </div>
@@ -582,16 +593,16 @@
   <div class="modal-mask hidden" id="stashModal">
     <div class="modal">
       <header class="modal-head">
-        <h2 id="stashTitle">回收箱（这里的东西不会自动删）</h2>
-        <button class="icon-btn" id="btnCloseStash" type="button" title="关闭">×</button>
+        <h2 id="stashTitle" data-i18n="回收箱（这里的东西不会自动删）">回收箱（这里的东西不会自动删）</h2>
+        <button class="icon-btn" id="btnCloseStash" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="trash-note" id="stashNote"></div>
       <div class="tidy-body" id="stashBody"></div>
       <div class="trash-foot">
-        <span class="tidy-hint" id="stashHint">放回＝搬回原位置；清空才进系统回收站。</span>
-        <button id="btnStashRestoreAll" class="btn btn-ghost btn-sm" type="button">全部放回</button>
-        <button id="btnStashEmpty" class="btn btn-ghost btn-sm btn-danger-ghost" type="button">清空（进系统回收站）</button>
-        <button id="btnCloseStash2" class="btn btn-ghost btn-sm" type="button">关闭</button>
+        <span class="tidy-hint" id="stashHint" data-i18n="放回＝搬回原位置；清空才进系统回收站。">放回＝搬回原位置；清空才进系统回收站。</span>
+        <button id="btnStashRestoreAll" class="btn btn-ghost btn-sm" type="button" data-i18n="全部放回">全部放回</button>
+        <button id="btnStashEmpty" class="btn btn-ghost btn-sm btn-danger-ghost" type="button" data-i18n="清空（进系统回收站）">清空（进系统回收站）</button>
+        <button id="btnCloseStash2" class="btn btn-ghost btn-sm" type="button" data-i18n="关闭">关闭</button>
       </div>
     </div>
   </div>
@@ -599,15 +610,15 @@
   <div class="modal-mask hidden" id="tidyModal">
     <div class="modal">
       <header class="modal-head">
-        <h2 id="tidyTitle">整理预案（预演）</h2>
-        <button class="icon-btn" id="btnCloseTidy" type="button" title="关闭">×</button>
+        <h2 id="tidyTitle" data-i18n="整理预案（预演）">整理预案（预演）</h2>
+        <button class="icon-btn" id="btnCloseTidy" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="trash-note" id="tidyNote"></div>
       <div class="tidy-body" id="tidyBody"></div>
       <div class="trash-foot">
-        <span class="tidy-hint" id="tidyHint">现在是预演：只看清单，不动任何文件。</span>
-        <button id="btnTidyCancel" class="btn btn-ghost btn-sm" type="button">关闭</button>
-        <button id="btnTidyRun" class="btn btn-primary btn-sm" type="button">按这份清单执行</button>
+        <span class="tidy-hint" id="tidyHint" data-i18n="现在是预演：只看清单，不动任何文件。">现在是预演：只看清单，不动任何文件。</span>
+        <button id="btnTidyCancel" class="btn btn-ghost btn-sm" type="button" data-i18n="关闭">关闭</button>
+        <button id="btnTidyRun" class="btn btn-primary btn-sm" type="button" data-i18n="按这份清单执行">按这份清单执行</button>
       </div>
     </div>
   </div>
@@ -616,15 +627,15 @@
   <div class="modal-mask hidden" id="diskCleanModal">
     <div class="modal">
       <header class="modal-head">
-        <h2 id="diskCleanTitle">清掉这一档（还没动任何文件）</h2>
-        <button class="icon-btn" id="btnCloseDiskClean" type="button" title="关闭">×</button>
+        <h2 id="diskCleanTitle" data-i18n="清掉这一档（还没动任何文件）">清掉这一档（还没动任何文件）</h2>
+        <button class="icon-btn" id="btnCloseDiskClean" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="trash-note" id="diskCleanNote"></div>
       <div class="tidy-body" id="diskCleanBody"></div>
       <div class="trash-foot">
-        <span class="tidy-hint" id="diskCleanHint">没点「确认清掉」之前，一个文件夹都不会动。</span>
-        <button id="btnDiskCleanRun" class="btn btn-primary btn-sm" type="button">确认清掉</button>
-        <button id="btnCloseDiskClean2" class="btn btn-ghost btn-sm" type="button">关闭</button>
+        <span class="tidy-hint" id="diskCleanHint" data-i18n="没点「确认清掉」之前，一个文件夹都不会动。">没点「确认清掉」之前，一个文件夹都不会动。</span>
+        <button id="btnDiskCleanRun" class="btn btn-primary btn-sm" type="button" data-i18n="确认清掉">确认清掉</button>
+        <button id="btnCloseDiskClean2" class="btn btn-ghost btn-sm" type="button" data-i18n="关闭">关闭</button>
       </div>
     </div>
   </div>
@@ -633,15 +644,15 @@
   <div class="modal-mask hidden" id="diskPeekModal">
     <div class="modal">
       <header class="modal-head">
-        <h2 id="diskPeekTitle">里面装的是什么</h2>
-        <button class="icon-btn" id="btnCloseDiskPeek" type="button" title="关闭">×</button>
+        <h2 id="diskPeekTitle" data-i18n="里面装的是什么">里面装的是什么</h2>
+        <button class="icon-btn" id="btnCloseDiskPeek" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="trash-note" id="diskPeekNote"></div>
       <div class="tidy-body" id="diskPeekBody"></div>
       <div class="trash-foot">
-        <span class="tidy-hint">这里显示的是这一层里最占地方的 10 项，不代表其他东西不重要。</span>
-        <button id="btnDiskPeekReveal" class="btn btn-ghost btn-sm" type="button">在文件夹里打开</button>
-        <button id="btnCloseDiskPeek2" class="btn btn-ghost btn-sm" type="button">关闭</button>
+        <span class="tidy-hint" data-i18n="这里显示的是这一层里最占地方的 10 项，不代表其他东西不重要。">这里显示的是这一层里最占地方的 10 项，不代表其他东西不重要。</span>
+        <button id="btnDiskPeekReveal" class="btn btn-ghost btn-sm" type="button" data-i18n="在文件夹里打开">在文件夹里打开</button>
+        <button id="btnCloseDiskPeek2" class="btn btn-ghost btn-sm" type="button" data-i18n="关闭">关闭</button>
       </div>
     </div>
   </div>
@@ -652,19 +663,19 @@
   <div class="modal-mask hidden" id="digestModal">
     <div class="modal modal-sm">
       <header class="modal-head">
-        <h2 id="digestTitle">管家小报</h2>
-        <button class="icon-btn" id="btnCloseDigest" type="button" title="关闭">×</button>
+        <h2 id="digestTitle" data-i18n="管家小报">管家小报</h2>
+        <button class="icon-btn" id="btnCloseDigest" type="button" data-i18n-title="关闭" title="关闭">×</button>
       </header>
       <div class="trash-note" id="digestNote"></div>
       <div class="digest-cards" id="digestCards"></div>
       <div class="digest-week" id="digestWeek"></div>
       <div class="digest-service">
-        <p>这些文件想变成能查的知识库？或者有人帮你把脚本改造成顺手的工具？</p>
-        <button id="btnDigestSite" class="btn btn-primary btn-sm" type="button">去智维工作室官网说说需求</button>
+        <p data-i18n="这些文件想变成能查的知识库？或者有人帮你把脚本改造成顺手的工具？">这些文件想变成能查的知识库？或者有人帮你把脚本改造成顺手的工具？</p>
+        <button id="btnDigestSite" class="btn btn-primary btn-sm" type="button" data-i18n="去智维工作室官网说说需求">去智维工作室官网说说需求</button>
       </div>
       <div class="trash-foot">
-        <span class="tidy-hint">以上数字只存在你这台电脑上，管家不往任何地方上报。</span>
-        <button id="btnCloseDigest2" class="btn btn-ghost btn-sm" type="button">关闭</button>
+        <span class="tidy-hint" data-i18n="以上数字只存在你这台电脑上，管家不往任何地方上报。">以上数字只存在你这台电脑上，管家不往任何地方上报。</span>
+        <button id="btnCloseDigest2" class="btn btn-ghost btn-sm" type="button" data-i18n="关闭">关闭</button>
       </div>
     </div>
   </div>
