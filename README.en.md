@@ -4,7 +4,7 @@
   <p>
     <img alt="license" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-1.0.0-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-1.1.0-6366f1">
     <img alt="local" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p><a href="README.md">中文</a> · <b>English</b></p>
@@ -12,7 +12,7 @@
 
 Manages the files AI tools pile up on your computer. Offline, free, nothing leaves the machine; deletions go to the Windows Recycle Bin and can be restored.
 
-> Since v0.8 the in-app interface is Chinese-only. This README is the English reference.
+> Available in English and Chinese. First launch follows your Windows language; switch anytime in **Settings → General → Interface language**.
 
 ![Main window](docs/screenshots/en/main.png)
 
@@ -26,7 +26,7 @@ Manages the files AI tools pile up on your computer. Offline, free, nothing leav
 2. Click **Scan whole computer** in the top bar — AI output gets recognized and sorted into categories; **Slim down** handles it by confidence tier, always showing the list before acting
 3. Three more entries sit at the top right of the **AI Files** page: **Recycle box** (restore what was stashed), **Monthly note** (what happened this month), **Cleanup log** (what was cleared)
 
-![Clean disk](docs/screenshots/disk.png)
+![Clean disk](docs/screenshots/en/disk.png)
 
 ## Features
 
