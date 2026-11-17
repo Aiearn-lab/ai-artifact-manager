@@ -61,7 +61,7 @@ function t(key, vars) {
   const dict = (window.I18N && window.I18N[LANG]) || {};
   let str = dict[key];
   if (str === undefined) {
-    // 没翻到的先用中文兜底，方便一眼看出哪里漏了
+    // 先用中文词典兜底；再没有就把 key 本身当文案（key 写中文原文，中文界面零改动）
     str = (window.I18N && window.I18N.zh && window.I18N.zh[key]) || key;
   }
   if (vars) {
@@ -72,11 +72,22 @@ function t(key, vars) {
   return str;
 }
 
+/** 就地双语：L('中文','English')。JS 里生成的文案用它，不用来回查词典。 */
+function L(zh, en) {
+  return LANG === 'zh' ? zh : (en === undefined ? zh : en);
+}
+
 function detectLang() {
-  // v0.8：英文界面入口已移除（代码保留作内部截图用）。默认只认显式保存过的 'en'，
-  // 其他一律中文——不再按系统语言自动切英文，小白装完看到的就是中文。
+  // 用户显式选过就用他选的
   const saved = state.config && state.config.ui && state.config.ui.lang;
-  return saved === 'en' ? 'en' : 'zh';
+  if (saved === 'en' || saved === 'zh') return saved;
+  // 没选过就跟系统语言：中文系统看中文（国内用户装完就是中文），其他语言看英文
+  try {
+    const nav = String(navigator.language || '') + ' ' + (navigator.languages || []).join(',');
+    return /zh/i.test(nav) ? 'zh' : 'en';
+  } catch {
+    return 'zh';
+  }
 }
 
 /** 把页面上所有打了标记的文案换成当前语言 */
@@ -86,6 +97,10 @@ function applyLang() {
 
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     el.textContent = t(el.dataset.i18n);
+  });
+  // 带 <b>/<code> 等标签的段落走 innerHTML，否则强调会被拍平
+  document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+    el.innerHTML = t(el.dataset.i18nHtml);
   });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
     el.placeholder = t(el.dataset.i18nPh);
@@ -290,7 +305,7 @@ function bindEvents() {
     // 体检要数几十万个文件，等不及的时候得能停下来
     if (diskState.busy) {
       diskState.cancelling = true;
-      $('#btnDiskScan').textContent = '正在停下…';
+      $('#btnDiskScan').textContent = L('正在停下…', 'Stopping…');
       window.api.diskCancel();
       return;
     }
@@ -358,9 +373,9 @@ function bindEvents() {
     if (!text) return;
     try {
       const r = await window.api.diskExport({ text });
-      if (r && r.saved) toast('体检结果已存好，可以随时翻出来看');
+      if (r && r.saved) toast(L('体检结果已存好，可以随时翻出来看', 'Saved — you can look at it again anytime'));
     } catch (err) {
-      toast(`没存成功：${err.message}`, true);
+      toast(L(`没存成功：${err.message}`, `Could not save: ${err.message}`), true);
     }
   });
 
@@ -427,7 +442,12 @@ function bindEvents() {
     renderList(); // 先按文件名/标签出结果，正文结果稍后补进来
     scheduleContentSearch(state.filter.q);
   });
-  // v0.8：界面语言选择器已移除（英文入口下线），setLang 仅留给内部截图工具调用
+  // 界面语言：设置页里能随时切，切完立刻生效（不用重启）
+  const langSel = $('#setLang');
+  if (langSel) {
+    langSel.value = LANG;
+    langSel.addEventListener('change', (e) => setLang(e.target.value));
+  }
   $('#btnOnboardOk').addEventListener('click', async () => {
     $('#onboardTip').classList.add('hidden');
     try {
@@ -1691,7 +1711,7 @@ async function doSlim() {
   }
   setBusy(false);
   const s = plan.stats;
-  if (!s.dupes && !s.chainCards && !s.stash) return toast('没找到要收拾的，你这挺干净。');
+  if (!s.dupes && !s.chainCards && !s.stash) return toast(L('没找到要收拾的，你这挺干净。', 'Nothing to tidy up — you are already clean.'));
   tierPlan = plan;
   tierApproved.clear();
   $('#slimModal').classList.remove('hidden');
@@ -1750,8 +1770,11 @@ function renderSlimBody() {
     .filter((c) => tierApproved.has(`${c.family}|${c.ext}`))
     .reduce((n, c) => n + c.older.length, 0);
   const total = s.dupes + olderApproved + s.stash;
-  $('#slimHint').textContent = `现在：删 ${s.dupes + olderApproved} 个（都进系统回收站）· 收 ${s.stash} 个（不删）。没点头的版本组不会动。`;
-  $('#btnSlimRun').textContent = total > 0 ? `处理这 ${total} 个` : '没可处理的';
+  $('#slimHint').textContent = L(
+    `现在：删 ${s.dupes + olderApproved} 个（都进系统回收站）· 收 ${s.stash} 个（不删）。没点头的版本组不会动。`,
+    `Now: delete ${s.dupes + olderApproved} (all go to the Recycle Bin) · stash ${s.stash} (not deleted). Version groups you have not approved are left alone.`
+  );
+  $('#btnSlimRun').textContent = total > 0 ? L(`处理这 ${total} 个`, `Process these ${total}`) : L('没可处理的', 'Nothing to process');
   $('#btnSlimRun').disabled = total === 0;
 }
 
@@ -1764,7 +1787,7 @@ async function runSlim() {
     out = await window.api.tierRun({ approvedChains });
   } catch (err) {
     setBusy(false);
-    return toast('瘦身失败：' + ((err && err.message) || err), true);
+    return toast(L('瘦身失败：', 'Slim-down failed: ') + ((err && err.message) || err), true);
   }
   setBusy(false);
   closeSlimModal();
@@ -1776,12 +1799,14 @@ async function runSlim() {
     /* 刷新失败不影响结果 */
   }
   const bits = [];
-  if (out.dupTrashed) bits.push(`删了 ${out.dupTrashed} 个重复`);
-  if (out.chainTrashed) bits.push(`删了 ${out.chainTrashed} 个旧版本`);
-  if (out.stashed) bits.push(`收起了 ${out.stashed} 个（没删，回收箱随时放回）`);
-  toast('处理好了：' + (bits.join('，') || '其实没什么可动的'));
-  if (out.failed && out.failed.length) toast(`有 ${out.failed.length} 个没动成（文件可能已经不在原位置）。`, true);
-  if (out.skipped && out.skipped.length) toast(`另有 ${out.skipped.length} 个被保护规则挡下，没碰。`);
+  if (out.dupTrashed) bits.push(L(`删了 ${out.dupTrashed} 个重复`, `${out.dupTrashed} duplicates deleted`));
+  if (out.chainTrashed) bits.push(L(`删了 ${out.chainTrashed} 个旧版本`, `${out.chainTrashed} old versions deleted`));
+  if (out.stashed) bits.push(L(`收起了 ${out.stashed} 个（没删，回收箱随时放回）`, `${out.stashed} stashed (not deleted — restore anytime)`));
+  toast(L('处理好了：', 'Done: ') + (bits.join(L('，', ', ')) || L('其实没什么可动的', 'nothing needed doing')));
+  if (out.failed && out.failed.length)
+    toast(L(`有 ${out.failed.length} 个没动成（文件可能已经不在原位置）。`, `${out.failed.length} item(s) could not be processed (the file may no longer be there).`), true);
+  if (out.skipped && out.skipped.length)
+    toast(L(`另有 ${out.skipped.length} 个被保护规则挡下，没碰。`, `${out.skipped.length} more were blocked by protection rules and left untouched.`));
 }
 
 async function openStashModal() {
@@ -1825,11 +1850,11 @@ async function restoreStash(ids) {
     r = await window.api.stashRestore(ids ? { ids } : {});
   } catch (err) {
     setBusy(false);
-    return toast('放回失败：' + ((err && err.message) || err), true);
+    return toast(L('放回失败：', 'Restore failed: ') + ((err && err.message) || err), true);
   }
   setBusy(false);
-  if (r.ok) toast(`放回了 ${r.ok} 个，回到原来的位置。`);
-  else if (r.skipped && r.skipped.length) toast('这几个没放回去：' + (r.skipped[0].reason || ''), true);
+  if (r.ok) toast(L(`放回了 ${r.ok} 个，回到原来的位置。`, `Restored ${r.ok} — back where they were.`));
+  else if (r.skipped && r.skipped.length) toast(L('这几个没放回去：', 'These could not be restored: ') + (r.skipped[0].reason || ''), true);
   try {
     const [list, scan] = await Promise.all([window.api.stashList(), window.api.lastScan()]);
     renderStashBody(list);
@@ -1840,14 +1865,17 @@ async function restoreStash(ids) {
 }
 
 async function restoreAllStash() {
-  if (!stashCount) return toast('回收箱是空的。');
+  if (!stashCount) return toast(L('回收箱是空的。', 'The recycle box is empty.'));
   await restoreStash(null);
 }
 
 async function emptyStash() {
-  if (!stashCount) return toast('回收箱是空的。');
+  if (!stashCount) return toast(L('回收箱是空的。', 'The recycle box is empty.'));
   const sure = window.confirm(
-    `清空回收箱？\n里面的 ${stashCount} 个文件会放进 Windows 系统回收站——在你清空系统回收站之前，还能从那儿找回来。\n工具自己不会彻底删除任何文件。`
+    L(
+      `清空回收箱？\n里面的 ${stashCount} 个文件会放进 Windows 系统回收站——在你清空系统回收站之前，还能从那儿找回来。\n工具自己不会彻底删除任何文件。`,
+      `Empty the recycle box?\nIts ${stashCount} files will be moved to the Windows Recycle Bin — you can still get them back from there until you empty it.\nThis tool never permanently deletes anything itself.`
+    )
   );
   if (!sure) return;
   setBusy(true);
@@ -1856,11 +1884,15 @@ async function emptyStash() {
     r = await window.api.stashEmpty();
   } catch (err) {
     setBusy(false);
-    return toast('清空失败：' + ((err && err.message) || err), true);
+    return toast(L('清空失败：', 'Could not empty: ') + ((err && err.message) || err), true);
   }
   setBusy(false);
-  toast(`已把 ${r.ok} 个放进系统回收站。`);
-  if (r.failed && r.failed.length) toast(`有 ${r.failed.length} 个没放进去（U 盘/网络盘通常没有回收站），留在回收箱里没动。`, true);
+  toast(L(`已把 ${r.ok} 个放进系统回收站。`, `Moved ${r.ok} item(s) to the Recycle Bin.`));
+  if (r.failed && r.failed.length)
+    toast(L(
+      `有 ${r.failed.length} 个没放进去（U 盘/网络盘通常没有回收站），留在回收箱里没动。`,
+      `${r.failed.length} could not be moved (USB and network drives usually have no Recycle Bin); they stayed in the recycle box.`
+    ), true);
   try {
     renderStashBody(await window.api.stashList());
   } catch {
@@ -2067,26 +2099,26 @@ async function renderDigest() {
   const note = $('#digestNote');
   const cards = $('#digestCards');
   const week = $('#digestWeek');
-  note.textContent = '正在算这个月的账…';
+  note.textContent = L('正在算这个月的账…', 'Adding up this month…');
   cards.innerHTML = '';
   week.textContent = '';
   try {
     const d = await window.api.digestGet();
     const m = d.month || {};
-    note.textContent = d.monthLine || '';
+    note.textContent = (LANG === 'zh' ? d.monthLine : d.monthLineEn) || d.monthLine || '';
     cards.innerHTML = [
-      { n: m.removed || 0, label: '收进回收箱', tip: '随时能放回原位置' },
-      { n: m.restored || 0, label: '放回原位', tip: '你反悔了，管家照办' },
-      { n: fmtBytesPlain(m.freedBytes || 0), label: '腾出空间', tip: '删掉的都进了系统回收站，还能反悔' },
-      { n: m.kept || 0, label: '收进整理目录', tip: '没删，只是挪到了一起' }
+      { n: m.removed || 0, label: L('收进回收箱', 'Stashed'), tip: L('随时能放回原位置', 'restore anytime') },
+      { n: m.restored || 0, label: L('放回原位', 'Restored'), tip: L('你反悔了，管家照办', 'changed your mind — done') },
+      { n: fmtBytesPlain(m.freedBytes || 0), label: L('腾出空间', 'Space freed'), tip: L('删掉的都进了系统回收站，还能反悔', 'all went to the Recycle Bin') },
+      { n: m.kept || 0, label: L('收进整理目录', 'Tidied'), tip: L('没删，只是挪到了一起', 'moved, not deleted') }
     ]
       .map(
         (c) => `<div class="digest-card"><div class="dc-num">${esc(String(c.n))}</div><div class="dc-label">${esc(c.label)}</div><div class="dc-tip">${esc(c.tip)}</div></div>`
       )
       .join('');
-    week.textContent = d.trayLine || '';
+    week.textContent = (LANG === 'zh' ? d.trayLine : d.trayLineEn) || d.trayLine || '';
   } catch (err) {
-    note.textContent = `算不出来：${err.message}`;
+    note.textContent = L(`算不出来：${err.message}`, `Could not compute: ${err.message}`);
   }
 }
 
@@ -2341,17 +2373,19 @@ async function onAiAction(e) {
 
 async function detectLocalAi() {
   const status = $('#localAiStatus');
-  status.textContent = '检测中…';
+  status.textContent = L('检测中…', 'Checking…');
   status.className = 'inline-status';
   try {
     const list = await window.api.aiDetectLocal();
     state.localAi = list;
     const online = list.filter((x) => x.online);
-    status.textContent = online.length ? `发现 ${online.length} 个本地 AI` : '没检测到（确认软件已启动并加载模型）';
+    status.textContent = online.length
+      ? L(`发现 ${online.length} 个本地 AI`, `Found ${online.length} local AI service(s)`)
+      : L('没检测到（确认软件已启动并加载模型）', 'None found (make sure the app is running with a model loaded)');
     status.className = `inline-status ${online.length ? 'ok' : ''}`;
     renderLocalAi(list);
   } catch (err) {
-    status.textContent = `检测失败：${err.message}`;
+    status.textContent = L(`检测失败：${err.message}`, `Detection failed: ${err.message}`);
     status.className = 'inline-status err';
   }
 }
@@ -2364,13 +2398,13 @@ function renderLocalAi(list) {
   }
   box.innerHTML = list
     .map((item) => {
-      const models = item.models && item.models.length ? item.models.slice(0, 3).join('、') : '未读到模型';
+      const models = item.models && item.models.length ? item.models.slice(0, 3).join(L('、', ', ')) : L('未读到模型', 'no models reported');
       return `<div class="local-ai-item">
         <div>
           <div class="lai-name"><span class="lai-dot ${item.online ? 'on' : 'off'}"></span>${esc(item.name)}</div>
-          <div class="lai-models">${item.online ? esc(models) : '未启动 / 端口没开'}</div>
+          <div class="lai-models">${item.online ? esc(models) : L('未启动 / 端口没开', 'not running / port closed')}</div>
         </div>
-        ${item.online ? `<button class="btn btn-ghost btn-sm" data-use-local="${esc(item.provider)}">用这个</button>` : ''}
+        ${item.online ? `<button class="btn btn-ghost btn-sm" data-use-local="${esc(item.provider)}">${L('用这个', 'Use this')}</button>` : ''}
       </div>`;
     })
     .join('');
@@ -2385,7 +2419,12 @@ function renderLocalAi(list) {
       $('#setAiBaseUrl').value = item.baseUrl;
       $('#setAiModel').value = model;
       $('#setAiKey').value = '';
-      toast(`已连上 ${item.name}${model ? `，模型：${model}` : ''}。可以直接用 AI 功能了。`);
+      toast(
+        L(
+          `已连上 ${item.name}${model ? `，模型：${model}` : ''}。可以直接用 AI 功能了。`,
+          `Connected to ${item.name}${model ? ` (model: ${model})` : ''}. AI features are ready to use.`
+        )
+      );
     });
   });
 }
@@ -2409,17 +2448,17 @@ async function saveAi() {
 
 async function testAi() {
   const st = $('#aiTestStatus');
-  st.textContent = '测试中…';
+  st.textContent = L('测试中…', 'Testing…');
   st.className = 'inline-status';
   try {
     const cfg = { baseUrl: $('#setAiBaseUrl').value.trim(), model: $('#setAiModel').value.trim() };
     const keyInput = $('#setAiKey').value.trim();
     if (keyInput) cfg.apiKey = keyInput;
     const r = await window.api.aiTest(cfg);
-    st.textContent = `连上了，模型回复：${r.reply || 'OK'}`;
+    st.textContent = L(`连上了，模型回复：${r.reply || 'OK'}`, `Connected. Model replied: ${r.reply || 'OK'}`);
     st.className = 'inline-status ok';
   } catch (err) {
-    st.textContent = `连不上：${err.message}`;
+    st.textContent = L(`连不上：${err.message}`, `Cannot connect: ${err.message}`);
     st.className = 'inline-status err';
   }
 }
@@ -2429,8 +2468,8 @@ async function openSettings() {
   const c = state.config || (await window.api.configGet());
   state.config = c;
 
-  const langSel = $('#setLang'); // v0.8 起界面已无此控件，留着只为兼容旧截图工具
-  if (langSel) langSel.value = (c.ui && c.ui.lang) || '';
+  const langSel = $('#setLang');
+  if (langSel) langSel.value = LANG;
   $('#setArchiveRoot').value = c.archiveRoot || '';
   $('#setMaxDepth').value = c.maxDepth || 14;
   $('#setMaxFiles').value = c.maxFiles || 50000;
@@ -2458,8 +2497,8 @@ function renderBuiltinWhitelist(items) {
   const paths = items.filter((i) => i.type === 'path').map((i) => i.value);
   const exts = items.filter((i) => i.type === 'ext').map((i) => i.value);
   $('#builtinList').innerHTML = `
-    <div class="builtin-group"><b>不会扫的目录（${paths.length}）</b><br>${paths.map(esc).join('<br>')}</div>
-    <div class="builtin-group"><b>不会扫的文件类型（${exts.length}）</b><br>${exts.map(esc).join(' ')}</div>
+    <div class="builtin-group"><b>${L(`不会扫的目录（${paths.length}）`, `Folders never scanned (${paths.length})`)}</b><br>${paths.map(esc).join('<br>')}</div>
+    <div class="builtin-group"><b>${L(`不会扫的文件类型（${exts.length}）`, `File types never scanned (${exts.length})`)}</b><br>${exts.map(esc).join(' ')}</div>
   `;
 }
 
@@ -2486,10 +2525,10 @@ async function saveGeneral() {
 async function refreshCtxStatus() {
   try {
     const r = await window.api.ctxStatus();
-    $('#ctxStatus').textContent = r.installed ? '已安装' : '未安装';
+    $('#ctxStatus').textContent = r.installed ? L('已安装', 'Installed') : L('未安装', 'Not installed');
     $('#ctxStatus').className = `inline-status ${r.installed ? 'ok' : ''}`;
   } catch {
-    $('#ctxStatus').textContent = '检测失败';
+    $('#ctxStatus').textContent = L('检测失败', 'Check failed');
   }
 }
 
@@ -2498,7 +2537,11 @@ async function setContextMenu(install) {
     if (install) await window.api.ctxInstall();
     else await window.api.ctxUninstall();
     await refreshCtxStatus();
-    toast(install ? '已安装右键扫描：在资源管理器里右键文件夹试试' : '已卸载右键菜单');
+    toast(
+      install
+        ? L('已安装右键扫描：在资源管理器里右键文件夹试试', 'Right-click scan installed — right-click a folder in Explorer to try it')
+        : L('已卸载右键菜单', 'Right-click menu removed')
+    );
   } catch (err) {
     toast(t('msg.opFail', { msg: err.message }), true);
   }
@@ -2509,14 +2552,14 @@ async function refreshMcp() {
   try {
     const info = await window.api.mcpInfo();
     state.mcp = info;
-    $('#mcpStatus').textContent = info.running ? '运行中' : '未启动';
+    $('#mcpStatus').textContent = info.running ? L('运行中', 'Running') : L('未启动', 'Not started');
     $('#mcpStatus').className = `inline-status ${info.running ? 'ok' : ''}`;
     $('#mcpEndpoint').textContent = info.running ? info.endpoint : '—';
-    $('#btnMcpToggle').textContent = info.running ? '关闭 MCP' : '开启 MCP';
+    $('#btnMcpToggle').textContent = info.running ? L('关闭 MCP', 'Stop MCP') : L('开启 MCP', 'Start MCP');
     $('#btnMcpToggle').className = `btn ${info.running ? 'btn-ghost' : 'btn-primary'} btn-sm`;
     $('#mcpConfigText').textContent = JSON.stringify(info.config.http, null, 2);
   } catch (err) {
-    $('#mcpStatus').textContent = `读取失败：${err.message}`;
+    $('#mcpStatus').textContent = L(`读取失败：${err.message}`, `Cannot read: ${err.message}`);
   }
 }
 
@@ -2527,11 +2570,11 @@ async function toggleMcp() {
       toast(t('msg.mcpOff'));
     } else {
       const r = await window.api.mcpStart();
-      toast(`MCP 已开启：${r.endpoint || '端口已监听'}`);
+      toast(L(`MCP 已开启：${r.endpoint || '端口已监听'}`, `MCP started: ${r.endpoint || 'port is listening'}`));
     }
     await refreshMcp();
   } catch (err) {
-    toast(`MCP 操作失败：${err.message}`, true);
+    toast(L(`MCP 操作失败：${err.message}`, `MCP operation failed: ${err.message}`), true);
   }
 }
 
@@ -2549,7 +2592,7 @@ async function copyMcpPrompt() {
   const text = $('#mcpPromptText').textContent.trim();
   try {
     await navigator.clipboard.writeText(text);
-    toast('提示词已复制，发给你的 AI 助手就行');
+    toast(L('提示词已复制，发给你的 AI 助手就行', 'Prompt copied — paste it to your AI assistant'));
   } catch {
     toast(t('msg.copyFail'), true);
   }
@@ -2698,24 +2741,40 @@ const diskState = {
   open: { safe: true, careful: false, keep: false }
 };
 
+// 三档的名字和解释。用 getter 让每次渲染都按当前语言取词，切语言立刻生效。
 const GRADE_META = {
-  safe: {
-    label: '能安全清掉',
-    color: '#10b981',
-    head: '删了没关系的',
-    note: '缓存、字节码、编译产物。删了要么自动重建、要么无感，不影响你任何成果。依赖包和虚拟环境不在这里——那是程序的零件，删了程序就跑不起来。这一档我们敢给你数字。'
+  get safe() {
+    return {
+      label: L('能安全清掉', 'Safe to clear'),
+      color: '#10b981',
+      head: L('删了没关系的', 'Fine to delete'),
+      note: L(
+        '缓存、字节码、编译产物。删了要么自动重建、要么无感，不影响你任何成果。依赖包和虚拟环境不在这里——那是程序的零件，删了程序就跑不起来。这一档我们敢给你数字。',
+        'Caches, bytecode, build output. Deleting these either regenerates them or changes nothing — your work is never affected. Dependency packages and virtual environments are NOT here: those are an app\'s parts, and removing them breaks it. This is the one tier we put a number on.'
+      )
+    };
   },
-  careful: {
-    label: '占地方的大件',
-    color: '#f59e0b',
-    head: '不是垃圾，你自己看',
-    note: '这几块块头最大。我们没把握替你判断能不能删——可能是你留的游戏、聊天记录里的文件、下载的素材。点「打开」看一眼里面是什么，你比我们清楚。我们不给这一档任何清理建议。'
+  get careful() {
+    return {
+      label: L('占地方的大件', 'Big items'),
+      color: '#f59e0b',
+      head: L('不是垃圾，你自己看', 'Not junk — your call'),
+      note: L(
+        '这几块块头最大。我们没把握替你判断能不能删——可能是你留的游戏、聊天记录里的文件、下载的素材。点「打开」看一眼里面是什么，你比我们清楚。我们不给这一档任何清理建议。',
+        'These are the biggest blocks. We will not decide for you whether they can go — they might be a game you keep, files from chat history, downloaded assets. Click "Open" to look inside; you know better than we do. We give no cleanup advice for this tier at all.'
+      )
+    };
   },
-  keep: {
-    label: '不用管',
-    color: '#94a3b8',
-    head: '不该动的',
-    note: '系统、程序、游戏本体、照片、源码。这些动了会出事，工具一律不碰。'
+  get keep() {
+    return {
+      label: L('不用管', 'Hands off'),
+      color: '#94a3b8',
+      head: L('不该动的', 'Should not be touched'),
+      note: L(
+        '系统、程序、游戏本体、照片、源码。这些动了会出事，工具一律不碰。',
+        'System files, programs, game installs, photos, source code. Touching these breaks things, so the tool never does.'
+      )
+    };
   }
 };
 
@@ -2741,7 +2800,7 @@ function renderDiskDrives() {
   const box = $('#diskDrives');
   if (!box) return;
   if (!diskState.drives.length) {
-    box.innerHTML = '<div class="disk-drive-loading">没有检测到可用的磁盘</div>';
+    box.innerHTML = `<div class="disk-drive-loading">${L('没有检测到可用的磁盘', 'No drives detected')}</div>`;
     const btn = $('#btnDiskScan');
     if (btn) btn.disabled = true;
     return;
@@ -2755,14 +2814,14 @@ function renderDiskDrives() {
       // 标出"占用最高、建议先看这块"：默认选中它是代码算的，用户看不见这个逻辑，
       // 不标出来他会莫名其妙"为什么一打开就选了 D 盘"。
       const isHottest = diskState.hottestRoot === d.root;
-      const tag = isHottest ? '<span class="drive-tag">占用最高，建议先看</span>' : '';
+      const tag = isHottest ? `<span class="drive-tag">${L('占用最高，建议先看', 'most full — start here')}</span>` : '';
       return `<button class="disk-drive${on}" type="button" data-root="${esc(d.root)}">
         <div class="disk-drive-top">
-          <span class="disk-drive-name">${esc(d.letter)}: 盘</span>
-          <span class="disk-drive-free">剩 ${fmtSize(d.free)}</span>
+          <span class="disk-drive-name">${esc(d.letter)}: ${L('盘', 'Drive')}</span>
+          <span class="disk-drive-free">${L('剩', 'free')} ${fmtSize(d.free)}</span>
         </div>
         <div class="disk-drive-bar${hot}"><span style="width:${pct.toFixed(1)}%"></span></div>
-        <div class="disk-drive-sub">已用 ${fmtSize(used)} · 共 ${fmtSize(d.total)}${tag}</div>
+        <div class="disk-drive-sub">${L('已用', 'used')} ${fmtSize(used)} · ${L('共', 'of')} ${fmtSize(d.total)}${tag}</div>
       </button>`;
     })
     .join('');
@@ -2772,17 +2831,20 @@ function renderDiskDrives() {
     btn.disabled = !diskState.picked || diskState.cancelling;
     const has = !!(diskState.result && diskState.result.grades);
     btn.textContent = diskState.busy
-      ? (diskState.cancelling ? '正在停下…' : '停下来')
+      ? (diskState.cancelling ? L('正在停下…', 'Stopping…') : L('停下来', 'Stop'))
       : has
-      ? '重新体检'
-      : '开始体检';
+      ? L('重新体检', 'Check again')
+      : L('开始体检', 'Start checkup');
   }
   const hint = $('#diskPickHint');
   if (hint) {
     const letter = diskState.picked ? String(diskState.picked).replace(/\\$/, '') : '';
     hint.textContent = diskState.picked
-      ? `已选 ${letter} 盘${diskState.hottestRoot === diskState.picked ? '（占用最高）' : ''}`
-      : '先点上面一块盘';
+      ? L(
+          `已选 ${letter} 盘${diskState.hottestRoot === diskState.picked ? '（占用最高）' : ''}`,
+          `Selected ${letter} drive${diskState.hottestRoot === diskState.picked ? ' (most full)' : ''}`
+        )
+      : L('先点上面一块盘', 'Pick a drive above first');
   }
 }
 
@@ -2793,7 +2855,10 @@ async function runDiskScan() {
   diskState.busy = true;
   diskState.cancelling = false;
   renderDiskDrives();
-  $('#statusText').textContent = `正在数 ${root} 里的文件…文件多的盘可能要一两分钟，不是在卡——随时可以点「停下来」。这期间一个文件都不会动。`;
+  $('#statusText').textContent = L(
+    `正在数 ${root} 里的文件…文件多的盘可能要一两分钟，不是在卡——随时可以点「停下来」。这期间一个文件都不会动。`,
+    `Measuring ${root}… a full drive can take a minute or two; it is not frozen — you can press Stop anytime. Not a single file is touched.`
+  );
   $('#progressBar').classList.remove('hidden');
   $('#progressFill').style.width = '12%';
   try {
@@ -2801,15 +2866,20 @@ async function runDiskScan() {
     diskState.result = res;
     renderDiskView();
     if (res.stopped) {
-      toast('停下了，没有动任何文件。想看完整结果再点一次「体检这块盘」');
-      $('#statusText').textContent = '体检已停下';
+      toast(L('停下了，没有动任何文件。想看完整结果再点一次「开始体检」', 'Stopped. Nothing was touched. Press "Start checkup" again for the full result.'));
+      $('#statusText').textContent = L('体检已停下', 'Checkup stopped');
     } else {
-      toast(`体检完了：${fmtSize(res.totalSize)}、${res.totalFiles} 个文件`);
-      $('#statusText').textContent = '体检完成，没有动任何文件';
+      toast(
+        L(
+          `体检完了：${fmtSize(res.totalSize)}、${res.totalFiles} 个文件`,
+          `Done: ${fmtSize(res.totalSize)} across ${res.totalFiles} files`
+        )
+      );
+      $('#statusText').textContent = L('体检完成，没有动任何文件', 'Checkup complete — nothing was touched');
     }
   } catch (err) {
-    toast(`体检没做成功：${err.message}`, true);
-    $('#statusText').textContent = '体检失败';
+    toast(L(`体检没做成功：${err.message}`, `Checkup failed: ${err.message}`), true);
+    $('#statusText').textContent = L('体检失败', 'Checkup failed');
   } finally {
     diskState.busy = false;
     diskState.cancelling = false;
@@ -2851,9 +2921,9 @@ function renderDiskResult() {
     const secs = res.durationMs ? Math.max(1, Math.round(res.durationMs / 1000)) : 0;
     totalEl.innerHTML = `
       <span class="dt-big">${fmtSize(total)}</span>
-      <span>这块盘上一共有这么多东西</span>
-      <span class="dt-chip">${(res.totalFiles || 0).toLocaleString()} 个文件</span>
-      ${secs ? `<span class="dt-chip">数完花了 ${secs} 秒</span>` : ''}`;
+      <span>${L('这块盘上一共有这么多东西', 'This is everything on the drive')}</span>
+      <span class="dt-chip">${(res.totalFiles || 0).toLocaleString()} ${L('个文件', 'files')}</span>
+      ${secs ? `<span class="dt-chip">${L(`数完花了 ${secs} 秒`, `took ${secs}s to measure`)}</span>` : ''}`;
   }
 
   // 一句话人话总结：小白不看六个数字，只看这一句就知道"所以呢"。
@@ -2870,14 +2940,23 @@ function renderDiskResult() {
     const carefulGB = g.careful.size / 1073741824;
     let line;
     if (!safeCnt) {
-      line = `这块盘没找到能放心清的东西。<b>剩下的都是你的文件或程序，管家不乱动。</b>`;
+      line = L(
+        '这块盘没找到能放心清的东西。<b>剩下的都是你的文件或程序，管家不乱动。</b>',
+        'Nothing on this drive is safe to clear. <b>The rest is your files or programs — the tool will not touch them.</b>'
+      );
     } else {
-      line =
+      line = L(
         `能放心清掉的只有 <b>${fmtSize(safeSize)}</b>（${safeCnt} 处）——清了能腾出这些空间，而且是进回收站、能反悔的。` +
-        (projCnt > 0 ? `另有 ${projCnt} 处是项目正在用的依赖，<b>管家不会清</b>。` : '') +
-        (carefulGB >= 1
-          ? `另外那 <b>${fmtSize(g.careful.size)}</b> 是占地方的大件，多半是你的游戏、资料或下载，<b>不是垃圾，得你自己看一眼</b>。`
-          : '');
+          (projCnt > 0 ? `另有 ${projCnt} 处是项目正在用的依赖，<b>管家不会清</b>。` : '') +
+          (carefulGB >= 1
+            ? `另外那 <b>${fmtSize(g.careful.size)}</b> 是占地方的大件，多半是你的游戏、资料或下载，<b>不是垃圾，得你自己看一眼</b>。`
+            : ''),
+        `Only <b>${fmtSize(safeSize)}</b> (${safeCnt} items) is safe to clear — that's the space you get back, and it goes to the Recycle Bin, so you can undo it.` +
+          (projCnt > 0 ? ` Another ${projCnt} item(s) are dependencies a project is using; <b>the tool will not clear those</b>.` : '') +
+          (carefulGB >= 1
+            ? ` The other <b>${fmtSize(g.careful.size)}</b> is big items — most likely your games, files or downloads. <b>Not junk: you need to look at those yourself.</b>`
+            : '')
+      );
     }
     plainEl.innerHTML = line;
     plainEl.classList.remove('hidden');
@@ -2901,8 +2980,10 @@ function renderDiskResult() {
     const projCnt = safeItems.filter((it) => it.inProject).length;
     const extra = {
       // 「能安全清掉」里若有项目依赖，明确标出来，否则体积和实际能清的按钮对不上
-      safe: projCnt ? `<span class="dl-warn">其中 ${projCnt} 处是项目依赖，不会清</span>` : '',
-      careful: '<span class="dl-warn">不是都能删，得你自己看一眼</span>',
+      safe: projCnt
+        ? `<span class="dl-warn">${L(`其中 ${projCnt} 处是项目依赖，不会清`, `${projCnt} of these are project dependencies — skipped`)}</span>`
+        : '',
+      careful: `<span class="dl-warn">${L('不是都能删，得你自己看一眼', 'not all deletable — check yourself')}</span>`,
       keep: ''
     };
     legendEl.innerHTML = grades
@@ -2912,9 +2993,9 @@ function renderDiskResult() {
         const cnt = k === 'safe' ? safeItems.length : g[k].count;
         return `<span class="disk-legend-item"><span class="disk-legend-dot ${k}"></span>${GRADE_META[k].label} <b>${fmtSize(
           g[k].size
-        )}</b> <span class="dl-count">${cnt} 处</span>${extra[k]}</span>`;
+        )}</b> <span class="dl-count">${cnt} ${L('处', 'items')}</span>${extra[k]}</span>`;
       })
-      .join('') + '<span class="disk-legend-item dl-sum">三档相加＝整块盘，不重不漏</span>';
+      .join('') + `<span class="disk-legend-item dl-sum">${L('三档相加＝整块盘，不重不漏', 'The three tiers add up to the whole drive')}</span>`;
   }
 
   renderDiskRecycle(res);
@@ -2935,10 +3016,13 @@ function renderDiskRecycle(res) {
     .join('　');
   el.innerHTML = `
     <div class="rb-main">
-      <div class="rb-title">回收站里还躺着 <span class="rb-num">${fmtSize(rb.size)}</span></div>
-      <div class="rb-note">${rb.files.toLocaleString()} 个文件已经被删掉了，但空间还没还给你——它们占的就是这块盘。${top ? `主要类型：${top}` : ''}</div>
+      <div class="rb-title">${L('回收站里还躺着', 'Still sitting in the Recycle Bin:')} <span class="rb-num">${fmtSize(rb.size)}</span></div>
+      <div class="rb-note">${L(
+        `${rb.files.toLocaleString()} 个文件已经被删掉了，但空间还没还给你——它们占的就是这块盘。${top ? `主要类型：${top}` : ''}`,
+        `${rb.files.toLocaleString()} files were deleted but the space was never returned — they still count against this drive.${top ? ` Mostly: ${top}` : ''}`
+      )}</div>
     </div>
-    <button class="btn btn-ghost btn-sm" id="btnDiskOpenTrash" type="button">打开回收站自己看</button>`;
+    <button class="btn btn-ghost btn-sm" id="btnDiskOpenTrash" type="button">${L('打开回收站自己看', 'Open the Recycle Bin')}</button>`;
   const btn = $('#btnDiskOpenTrash');
   if (btn) btn.addEventListener('click', () => window.api.openTrash());
 }
@@ -2966,32 +3050,35 @@ function renderDiskGroups(res) {
           // 只剩下的"本级零散文件"：路径等于上级，写成「xx（本级零散文件）」才不会被误读成整个目录
           const hasDeeper = allPaths.some((p) => p !== full && p.startsWith(full.endsWith('\\') ? full : full + '\\'));
           const label = (rel || it.name || full).replace(/^\\+/, '');
-          const name = hasDeeper ? `${label}（本级零散文件）` : label;
+          const name = hasDeeper ? `${label}${L('（本级零散文件）', ' (loose files here)')}` : label;
           // 项目依赖：名字看着能重建，但清掉项目就跑不起来。标出来、不给清按钮、也不算进可清体积。
           const proj = it.inProject ? String(it.inProject) : '';
-          const why = proj ? `这是 ${proj} 的依赖，清掉项目就跑不起来` : it.why || GRADE_META[k].head;
+          const why = proj
+            ? L(`这是 ${proj} 的依赖，清掉项目就跑不起来`, `A dependency of ${proj} — removing it breaks the project`)
+            : it.why || GRADE_META[k].head;
           return `<div class="disk-row">
             <div class="dr-path">
-              <div class="dr-name">${esc(name || full)}${proj ? '<span class="dr-tag">项目依赖·不会清</span>' : ''}</div>
+              <div class="dr-name">${esc(name || full)}${proj ? `<span class="dr-tag">${L('项目依赖·不会清', 'dependency · skipped')}</span>` : ''}</div>
               <div class="dr-full" title="${esc(full)}">${esc(full)}</div>
             </div>
             <div class="dr-why" title="${esc(why)}">${esc(why)}</div>
             <div class="dr-size">${fmtSize(it.size)}</div>
             ${
               k === 'safe' && !proj
-                ? `<button class="btn btn-ghost btn-sm dr-btn" type="button" data-clean-one="${esc(full)}">清掉</button>`
+                ? `<button class="btn btn-ghost btn-sm dr-btn" type="button" data-clean-one="${esc(full)}">${L('清掉', 'Clear')}</button>`
                 : ''
             }
-            ${k !== 'safe' ? `<button class="btn btn-ghost btn-sm dr-btn" type="button" data-peek="${esc(full)}">看看里面</button>` : ''}
-            <button class="btn btn-ghost btn-sm dr-btn" type="button" data-reveal="${esc(full)}">打开</button>
+            ${k !== 'safe' ? `<button class="btn btn-ghost btn-sm dr-btn" type="button" data-peek="${esc(full)}">${L('看看里面', 'Look inside')}</button>` : ''}
+            <button class="btn btn-ghost btn-sm dr-btn" type="button" data-reveal="${esc(full)}">${L('打开', 'Open')}</button>
           </div>`;
         })
         .join('');
       const more =
         items.length > 12 && !showAll
-          ? `<div class="disk-row-more">还有 ${items.length - 12} 处，合计 ${fmtSize(
-              items.slice(12).reduce((n, x) => n + x.size, 0)
-            )}　<button class="btn btn-ghost btn-sm" type="button" data-showall="${k}">全部展开</button></div>`
+          ? `<div class="disk-row-more">${L(
+              `还有 ${items.length - 12} 处，合计 ${fmtSize(items.slice(12).reduce((n, x) => n + x.size, 0))}`,
+              `${items.length - 12} more, ${fmtSize(items.slice(12).reduce((n, x) => n + x.size, 0))} in total`
+            )}　<button class="btn btn-ghost btn-sm" type="button" data-showall="${k}">${L('全部展开', 'Show all')}</button></div>`
           : '';
       // 只有「能安全清掉」这一档给清理按钮；另外两档连按钮都不出现，
       // 免得用户以为"占地方的大件"也能一键清。
@@ -3000,22 +3087,23 @@ function renderDiskGroups(res) {
       const cleanSize = cleanable.reduce((n, it) => n + (it.size || 0), 0);
       const cleanBtn =
         k === 'safe' && cleanable.length
-          ? `<button class="btn btn-primary btn-sm dg-clean" type="button" data-clean-all="1">清掉这一档（${cleanable.length} 处 · ${fmtSize(
-              cleanSize
-            )}）</button>`
+          ? `<button class="btn btn-primary btn-sm dg-clean" type="button" data-clean-all="1">${L(
+              `清掉这一档（${cleanable.length} 处 · ${fmtSize(cleanSize)}）`,
+              `Clear this tier (${cleanable.length} items · ${fmtSize(cleanSize)})`
+            )}</button>`
           : '';
       return `<div class="disk-group${open}" data-grade="${k}">
         <div class="disk-group-head" data-toggle="${k}">
           <span class="dg-dot ${k}"></span>
           <span class="dg-name">${meta.label} · ${meta.head}</span>
           <span class="dg-size">${fmtSize(bucket.size)}</span>
-          <span class="dg-count">${bucket.count} 处</span>
+          <span class="dg-count">${bucket.count} ${L('处', 'items')}</span>
           ${cleanBtn}
           <span class="dg-caret">▶</span>
         </div>
         <div class="disk-group-body">
           <div class="disk-group-note">${esc(meta.note)}</div>
-          ${rows || '<div class="disk-group-note">这一档没有东西。</div>'}
+          ${rows || `<div class="disk-group-note">${L('这一档没有东西。', 'Nothing in this tier.')}</div>`}
           ${more}
         </div>
       </div>`;
@@ -3033,34 +3121,44 @@ function whyOf(it, grade) {
 function buildDiskReport() {
   const res = diskState.result;
   if (!res || !res.grades) {
-    toast('还没有体检结果', true);
+    toast(L('还没有体检结果', 'No checkup result yet'), true);
     return '';
   }
   const g = res.grades;
   const root = String(res.root || '');
   const lines = [];
-  lines.push(`# 磁盘体检 · ${root.replace(/\\$/, '')} 盘`);
+  lines.push(L(`# 磁盘体检 · ${root.replace(/\\$/, '')} 盘`, `# Disk checkup · ${root.replace(/\\$/, '')} drive`));
   lines.push('');
-  lines.push(`- 日期：${new Date().toLocaleString('zh-CN')}`);
-  lines.push(`- 这块盘一共占用：${fmtSize(res.totalSize)}（${(res.totalFiles || 0).toLocaleString()} 个文件）`);
+  lines.push(L(`- 日期：${new Date().toLocaleString('zh-CN')}`, `- Date: ${new Date().toLocaleString('en-US')}`));
+  lines.push(
+    L(
+      `- 这块盘一共占用：${fmtSize(res.totalSize)}（${(res.totalFiles || 0).toLocaleString()} 个文件）`,
+      `- Total used on this drive: ${fmtSize(res.totalSize)} (${(res.totalFiles || 0).toLocaleString()} files)`
+    )
+  );
   if (res.recycleBin && res.recycleBin.exists && res.recycleBin.size) {
-    lines.push(`- 回收站里还压着：${fmtSize(res.recycleBin.size)}（${res.recycleBin.files.toLocaleString()} 个已删文件）`);
+    lines.push(
+      L(
+        `- 回收站里还压着：${fmtSize(res.recycleBin.size)}（${res.recycleBin.files.toLocaleString()} 个已删文件）`,
+        `- Still held by the Recycle Bin: ${fmtSize(res.recycleBin.size)} (${res.recycleBin.files.toLocaleString()} deleted files)`
+      )
+    );
   }
   lines.push('');
-  lines.push('## 三档汇总');
+  lines.push(L('## 三档汇总', '## Three tiers'));
   lines.push('');
-  lines.push('| 档位 | 体积 | 目录数 | 含义 |');
+  lines.push(L('| 档位 | 体积 | 目录数 | 含义 |', '| Tier | Size | Folders | Meaning |'));
   lines.push('| --- | --- | --- | --- |');
   for (const k of ['safe', 'careful', 'keep']) {
     lines.push(`| ${GRADE_META[k].label} | ${fmtSize(g[k].size)} | ${g[k].count} | ${GRADE_META[k].head} |`);
   }
   lines.push('');
-  lines.push('三档相加正好等于整块盘的占用，没有重复计算。');
+  lines.push(L('三档相加正好等于整块盘的占用，没有重复计算。', 'The three tiers add up exactly to the drive usage, with no double counting.'));
   for (const k of ['safe', 'careful', 'keep']) {
     const items = (g[k].items || []).filter((it) => it.size > 0).slice(0, 30);
     if (!items.length) continue;
     lines.push('');
-    lines.push(`## ${GRADE_META[k].label}（${fmtSize(g[k].size)}）`);
+    lines.push(`## ${GRADE_META[k].label} (${fmtSize(g[k].size)})`);
     lines.push('');
     lines.push(GRADE_META[k].note);
     lines.push('');
@@ -3068,11 +3166,11 @@ function buildDiskReport() {
       lines.push(`- \`${it.path}\`　${fmtSize(it.size)}　${whyOf(it, k)}`);
     }
     const rest = (g[k].items || []).filter((it) => it.size > 0).length - items.length;
-    if (rest > 0) lines.push(`- ……另有 ${rest} 处未列出`);
+    if (rest > 0) lines.push(L(`- ……另有 ${rest} 处未列出`, `- … ${rest} more not listed`));
   }
   lines.push('');
   lines.push('---');
-  lines.push('由 AI产出管家 生成 · 智维工作室 Zhiwei Studio · www.zhiweistudio.com.cn');
+  lines.push(L('由 AI产出管家 生成 · 智维工作室 Zhiwei Studio · www.zhiweistudio.com.cn', 'Generated by AI Artifact Manager · Zhiwei Studio · www.zhiweistudio.com.cn'));
   return lines.join('\n');
 }
 
@@ -3083,7 +3181,7 @@ const diskClean = { paths: null, running: false, lastResult: null };
 function openDiskClean(paths) {
   const res = diskState.result;
   if (!res || !res.grades || !res.grades.safe) {
-    toast('先做一次体检', true);
+    toast(L('先做一次体检', 'Run a checkup first'), true);
     return;
   }
   const all = res.grades.safe.items || [];
@@ -3093,7 +3191,7 @@ function openDiskClean(paths) {
     .filter((it) => it && it.path && !it.inProject)
     .filter((it) => (want ? want.has(String(it.path)) : true));
   if (!list.length) {
-    toast('这一档现在没有可清的东西');
+    toast(L('这一档现在没有可清的东西', 'Nothing in this tier to clear right now'));
     return;
   }
   diskClean.paths = list.map((it) => it.path);
@@ -3102,14 +3200,22 @@ function openDiskClean(paths) {
 
   const total = list.reduce((n, it) => n + (it.size || 0), 0);
   const root = String(res.root || '');
-  $('#diskCleanTitle').textContent = want ? '清掉这一个（还没删）' : '清掉这些能腾空间（还没删）';
+  $('#diskCleanTitle').textContent = want
+    ? L('清掉这一个（还没删）', 'Clear this one (nothing deleted yet)')
+    : L('清掉这些能腾空间（还没删）', 'Clear these to free space (nothing deleted yet)');
   // 说人话：先给"能腾多少"，再一句安抚。不堆"依赖包/编译产物"这类黑话。
   // 量大时先说清"要等、能停"——否则用户点完以为卡死（真机上清 20GB 临时目录要几分钟）。
   const bigBatch = total > 2 * 1024 * 1024 * 1024;
   $('#diskCleanNote').innerHTML =
-    `清掉后能腾出 <b>${fmtSize(total)}</b> 空间。这些是软件用临时留下的东西，不是你的文件和资料。` +
+    L(
+      `清掉后能腾出 <b>${fmtSize(total)}</b> 空间。这些是软件用临时留下的东西，不是你的文件和资料。`,
+      `You get <b>${fmtSize(total)}</b> back. These are leftovers software left behind — not your files or documents.`
+    ) +
     (bigBatch
-      ? `<br><span class="dcn-big">这一批量比较大，要花几分钟——中途可以点「停下来」，已经清掉的不会白清。</span>`
+      ? `<br><span class="dcn-big">${L(
+          '这一批量比较大，要花几分钟——中途可以点「停下来」，已经清掉的不会白清。',
+          'This is a big batch and may take a few minutes — you can press Stop partway, and anything already cleared stays cleared.'
+        )}</span>`
       : '');
 
   const rows = list
@@ -3127,9 +3233,9 @@ function openDiskClean(paths) {
         if (/\.(exe|dll|pak)$/i.test(s)) continue;
         if (s && !s.includes(':')) { who = s; break; }
       }
-      const name = who || (it.name || segs[segs.length - 2] || '临时文件');
+      const name = who || (it.name || segs[segs.length - 2] || L('临时文件', 'temp file'));
       return `<div class="disk-row">
-        <div class="dr-path"><div class="dr-name">${esc(name)} 留下的临时文件</div><div class="dr-full" title="${esc(full)}">${esc(rel)}</div></div>
+        <div class="dr-path"><div class="dr-name">${esc(name)} ${L('留下的临时文件', 'left these behind')}</div><div class="dr-full" title="${esc(full)}">${esc(rel)}</div></div>
         <div class="dr-why">${esc(it.why || '')}</div>
         <div class="dr-size">${fmtSize(it.size)}</div>
       </div>`;
@@ -3138,24 +3244,31 @@ function openDiskClean(paths) {
 
   $('#diskCleanBody').innerHTML = `
     <div class="disk-clean-note">
-      <div class="dcn-item"><b>会进 Windows 回收站</b><span>和你在资源管理器里右键删除完全一样。清完还能在系统回收站里找到它，右键「还原」就回来了。管家从不做永久删除。</span></div>
-      <div class="dcn-item"><b>项目里的依赖会自动跳过</b><span>旁边有 package.json / .git / requirements.txt 的，说明是某个项目正在用，清掉项目就跑不起来了——这类一律不动。</span></div>
+      <div class="dcn-item"><b>${L('会进 Windows 回收站', 'Goes to the Windows Recycle Bin')}</b><span>${L(
+        '和你在资源管理器里右键删除完全一样。清完还能在系统回收站里找到它，右键「还原」就回来了。管家从不做永久删除。',
+        'Exactly the same as right-click delete in Explorer. You can still find it in the Recycle Bin afterwards and restore it. This tool never permanently deletes anything.'
+      )}</span></div>
+      <div class="dcn-item"><b>${L('项目里的依赖会自动跳过', 'Dependencies inside projects are skipped')}</b><span>${L(
+        '旁边有 package.json / .git / requirements.txt 的，说明是某个项目正在用，清掉项目就跑不起来了——这类一律不动。',
+        'If there is a package.json / .git / requirements.txt nearby, a project is using it and removing it would break that project — those are never touched.'
+      )}</span></div>
     </div>
     <div class="disk-clean-list">${rows}</div>
     ${
       list.length > 12
-        ? `<div class="disk-row-more">还有 ${list.length - 12} 处没有列出来，合计 ${fmtSize(
-            list.slice(12).reduce((n, x) => n + (x.size || 0), 0)
+        ? `<div class="disk-row-more">${L(
+            `还有 ${list.length - 12} 处没有列出来，合计 ${fmtSize(list.slice(12).reduce((n, x) => n + (x.size || 0), 0))}`,
+            `${list.length - 12} more not listed, ${fmtSize(list.slice(12).reduce((n, x) => n + (x.size || 0), 0))} in total`
           )}</div>`
         : ''
     }`;
 
   const runBtn = $('#btnDiskCleanRun');
   runBtn.dataset.mode = '';
-  runBtn.textContent = `确认清掉，腾出 ${fmtSize(total)}`;
+  runBtn.textContent = L(`确认清掉，腾出 ${fmtSize(total)}`, `Clear it — free ${fmtSize(total)}`);
   runBtn.classList.remove('hidden');
   runBtn.disabled = false;
-  $('#diskCleanHint').textContent = '没点「确认清掉」之前，一个文件夹都不会动。';
+  $('#diskCleanHint').textContent = L('没点「确认清掉」之前，一个文件夹都不会动。', 'Nothing is touched until you confirm.');
   $('#diskCleanModal').classList.remove('hidden');
 }
 
@@ -3171,14 +3284,17 @@ async function runDiskClean() {
   const runBtn = $('#btnDiskCleanRun');
   const stopBtn = $('#btnCloseDiskClean2');
   runBtn.disabled = true;
-  runBtn.textContent = '正在清…';
+  runBtn.textContent = L('正在清…', 'Clearing…');
   // 清理中把「关闭」变成「停下来」：原来 running 时关闭按钮点了没反应，用户只能干等
   if (stopBtn) {
-    stopBtn.textContent = '停下来';
+    stopBtn.textContent = L('停下来', 'Stop');
     stopBtn.disabled = false;
   }
-  $('#diskCleanHint').textContent = '正在往回收站搬，文件夹大的时候要等一会儿。中途可以点「停下来」。';
-  $('#statusText').textContent = '正在清理…';
+  $('#diskCleanHint').textContent = L(
+    '正在往回收站搬，文件夹大的时候要等一会儿。中途可以点「停下来」。',
+    'Moving to the Recycle Bin — big folders take a while. You can press Stop partway.'
+  );
+  $('#statusText').textContent = L('正在清理…', 'Clearing…');
   try {
     const r = await window.api.diskClean({ paths: diskClean.paths });
     diskClean.lastResult = r;
@@ -3194,15 +3310,15 @@ async function runDiskClean() {
       /* 拿不到就等下次体检 */
     }
   } catch (err) {
-    toast(`清理没做成：${err.message}`, true);
+    toast(L(`清理没做成：${err.message}`, `Cleanup failed: ${err.message}`), true);
     runBtn.disabled = false;
-    runBtn.textContent = '确认清掉';
-    $('#diskCleanHint').textContent = '这次没有动任何东西，可以换个方式再试。';
+    runBtn.textContent = L('确认清掉', 'Confirm');
+    $('#diskCleanHint').textContent = L('这次没有动任何东西，可以换个方式再试。', 'Nothing was touched — try again another way.');
   } finally {
     diskClean.running = false;
-    $('#statusText').textContent = '就绪';
+    $('#statusText').textContent = L('就绪', 'Ready');
     if (stopBtn) {
-      stopBtn.textContent = '关闭';
+      stopBtn.textContent = L('关闭', 'Close');
       stopBtn.disabled = false;
     }
   }
@@ -3210,18 +3326,21 @@ async function runDiskClean() {
 
 async function renderDiskCleanResult(r) {
   const doneSize = (r.done || []).reduce((n, x) => n + (x.size || 0), 0);
-  $('#diskCleanTitle').textContent = '清理结果';
+  $('#diskCleanTitle').textContent = L('清理结果', 'Cleanup result');
   $('#diskCleanNote').innerHTML = (r.done || []).length
-    ? `清掉 <b>${r.done.length}</b> 处，腾出 <b>${fmtSize(doneSize)}</b>。${r.stopped ? '　（提前停下了，剩下的没动）' : ''}`
-    : '这次没有任何文件夹被清掉。';
+    ? L(
+        `清掉 <b>${r.done.length}</b> 处，腾出 <b>${fmtSize(doneSize)}</b>。${r.stopped ? '　（提前停下了，剩下的没动）' : ''}`,
+        `Cleared <b>${r.done.length}</b> item(s), freed <b>${fmtSize(doneSize)}</b>.${r.stopped ? ' (stopped early; the rest was left alone)' : ''}`
+      )
+    : L('这次没有任何文件夹被清掉。', 'No folders were cleared this time.');
 
   const block = (title, items, tone, render) =>
     items && items.length
-      ? `<div class="disk-clean-block ${tone}"><div class="dcb-title">${title}（${items.length}）</div>${items
+      ? `<div class="disk-clean-block ${tone}"><div class="dcb-title">${title} (${items.length})</div>${items
           .slice(0, 8)
           .map(render)
           .join('')}${
-          items.length > 8 ? `<div class="dcb-more">还有 ${items.length - 8} 条</div>` : ''
+          items.length > 8 ? `<div class="dcb-more">${L(`还有 ${items.length - 8} 条`, `${items.length - 8} more`)}</div>` : ''
         }</div>`
       : '';
 
@@ -3232,28 +3351,34 @@ async function renderDiskCleanResult(r) {
   const root = String((diskState.result && diskState.result.root) || '');
 
   $('#diskCleanBody').innerHTML =
-    block('已经清掉', r.done, 'ok', (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${fmtSize(it.size)}</em></div>`) +
+    block(L('已经清掉', 'Cleared'), r.done, 'ok', (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${fmtSize(it.size)}</em></div>`) +
     block(
-      '自动跳过（按规矩不碰）',
+      L('自动跳过（按规矩不碰）', 'Skipped by rule'),
       r.skipped,
       'skip',
       (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${esc(it.reason || '')}</em></div>`
     ) +
     block(
-      '没清成功',
+      L('没清成功', 'Could not clear'),
       r.failed,
       'fail',
       (it) => `<div class="dcb-row"><span>${esc(escPath(it.path, root))}</span><em>${esc(it.error || '')}</em></div>`
     ) +
     `<div class="disk-clean-note">
-      <div class="dcn-item"><b>想还原怎么办</b><span>打开 Windows 回收站，找到那个文件夹右键「还原」，就回到原来的位置。</span></div>
+      <div class="dcn-item"><b>${L('想还原怎么办', 'How to restore')}</b><span>${L(
+        '打开 Windows 回收站，找到那个文件夹右键「还原」，就回到原来的位置。',
+        'Open the Windows Recycle Bin, right-click the folder and choose Restore — it goes back where it was.'
+      )}</span></div>
     </div>`;
 
   const runBtn = $('#btnDiskCleanRun');
-  runBtn.textContent = '打开回收站看看';
+  runBtn.textContent = L('打开回收站看看', 'Open the Recycle Bin');
   runBtn.disabled = false;
   runBtn.dataset.mode = 'openTrash';
-  $('#diskCleanHint').textContent = '这些文件夹已经在系统回收站里了，管家没有永久删除任何东西。';
+  $('#diskCleanHint').textContent = L(
+    '这些文件夹已经在系统回收站里了，管家没有永久删除任何东西。',
+    'These folders are in the Windows Recycle Bin now. Nothing was permanently deleted.'
+  );
 }
 
 /* ---------- 看看里面 ---------- */
@@ -3264,16 +3389,16 @@ const diskPeek = { path: '', parent: null };
 
 async function openDiskPeek(dirPath) {
   diskPeek.path = String(dirPath || '');
-  $('#diskPeekTitle').textContent = '正在看…';
+  $('#diskPeekTitle').textContent = L('正在看…', 'Looking…');
   $('#diskPeekNote').textContent = '';
-  $('#diskPeekBody').innerHTML = '<div class="disk-row-more">正在数这一层的东西…</div>';
+  $('#diskPeekBody').innerHTML = `<div class="disk-row-more">${L('正在数这一层的东西…', 'Measuring this level…')}</div>`;
   $('#diskPeekModal').classList.remove('hidden');
   try {
     const r = await window.api.diskPeek(diskPeek.path);
     diskPeek.parent = r.parent;
     renderDiskPeek(r);
   } catch (err) {
-    $('#diskPeekTitle').textContent = '看不了这个目录';
+    $('#diskPeekTitle').textContent = L('看不了这个目录', 'Cannot open this folder');
     $('#diskPeekNote').textContent = '';
     $('#diskPeekBody').innerHTML = `<div class="disk-row-more">${esc(err.message)}</div>`;
   }
@@ -3294,7 +3419,7 @@ function renderDiskPeek(r) {
       (f) => `<div class="disk-row">
         <div class="dr-path">
           <div class="dr-name">${esc(f.name)}</div>
-          <div class="dr-full">${esc(f.ext || '无扩展名')}　${new Date(f.mtime).toLocaleDateString('zh-CN')}</div>
+          <div class="dr-full">${esc(f.ext || L('无扩展名', 'no extension'))}　${new Date(f.mtime).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : 'en-US')}</div>
         </div>
         <div class="dr-size">${fmtSize(f.size)}</div>
       </div>`
@@ -3304,25 +3429,29 @@ function renderDiskPeek(r) {
   const dirRows = (r.dirs || [])
     .map(
       (d) => `<button class="disk-row peek-dir" type="button" data-peek="${esc(d.path)}">
-        <div class="dr-path"><div class="dr-name">${esc(d.name)}</div><div class="dr-full">文件夹 · 点进去接着看</div></div>
+        <div class="dr-path"><div class="dr-name">${esc(d.name)}</div><div class="dr-full">${L('文件夹 · 点进去接着看', 'folder · click to go deeper')}</div></div>
         <div class="dr-size">›</div>
       </button>`
     )
     .join('');
 
-  $('#diskPeekNote').innerHTML =
+  $('#diskPeekNote').innerHTML = L(
     `这一层的文件加起来 <b>${fmtSize(r.fileBytes)}</b>（${r.fileCount} 个文件` +
-    (r.dirCount ? `，另有 <b>${r.dirCount}</b> 个子文件夹` : '') +
-    `）。子文件夹里的东西没算进来——点进去看。`;
+      (r.dirCount ? `，另有 <b>${r.dirCount}</b> 个子文件夹` : '') +
+      `）。子文件夹里的东西没算进来——点进去看。`,
+    `Files directly in this folder add up to <b>${fmtSize(r.fileBytes)}</b> (${r.fileCount} files` +
+      (r.dirCount ? `, plus <b>${r.dirCount}</b> subfolders` : '') +
+      `). Contents of subfolders are not counted — click into them.`
+  );
 
   $('#diskPeekBody').innerHTML = `
-    ${fileRows ? `<div class="peek-sec-title">最占地方的 ${r.files.length} 个文件</div><div class="disk-clean-list">${fileRows}</div>` : ''}
-    ${dirRows ? `<div class="peek-sec-title">里面的文件夹（${r.dirCount} 个${r.dirCount > 40 ? '，只列前 40' : ''}）</div><div class="disk-clean-list">${dirRows}</div>` : ''}
-    ${!fileRows && !dirRows ? '<div class="disk-row-more">这一层是空的</div>' : ''}
-    ${r.skipped ? `<div class="disk-row-more">另有 ${r.skipped} 项打不开或不是普通文件，跳过了</div>` : ''}
+    ${fileRows ? `<div class="peek-sec-title">${L(`最占地方的 ${r.files.length} 个文件`, `The ${r.files.length} biggest files`)}</div><div class="disk-clean-list">${fileRows}</div>` : ''}
+    ${dirRows ? `<div class="peek-sec-title">${L(`里面的文件夹（${r.dirCount} 个${r.dirCount > 40 ? '，只列前 40' : ''}）`, `Subfolders (${r.dirCount}${r.dirCount > 40 ? ', first 40 shown' : ''})`)}</div><div class="disk-clean-list">${dirRows}</div>` : ''}
+    ${!fileRows && !dirRows ? `<div class="disk-row-more">${L('这一层是空的', 'This level is empty')}</div>` : ''}
+    ${r.skipped ? `<div class="disk-row-more">${L(`另有 ${r.skipped} 项打不开或不是普通文件，跳过了`, `${r.skipped} item(s) skipped (unreadable or not regular files)`)}</div>` : ''}
     ${
       r.parent
-        ? `<div class="peek-up"><button class="btn btn-ghost btn-sm" type="button" data-peek="${esc(r.parent)}">↑ 返回上一层</button></div>`
+        ? `<div class="peek-up"><button class="btn btn-ghost btn-sm" type="button" data-peek="${esc(r.parent)}">↑ ${L('返回上一层', 'Up one level')}</button></div>`
         : ''
     }`;
 
