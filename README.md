@@ -4,13 +4,15 @@
   <p>
     <img alt="license" src="https://img.shields.io/badge/license-MIT-2563eb">
     <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0ea5e9">
-    <img alt="version" src="https://img.shields.io/badge/version-1.0.0-6366f1">
+    <img alt="version" src="https://img.shields.io/badge/version-1.1.0-6366f1">
     <img alt="local" src="https://img.shields.io/badge/data-100%25%20local-059669">
   </p>
   <p><b>中文</b> · <a href="README.en.md">English</a></p>
 </div>
 
 管理 AI 工具在电脑上堆积的文件。离线、免费，数据不出本机；删除的文件进 Windows 回收站，可以还原。
+
+> 界面支持中文和英文。首次打开跟随系统语言，随时可在**设置 → 常规 → 界面语言**里切换。
 
 ![主界面](docs/screenshots/main.png)
 
